@@ -118,6 +118,11 @@ td input{padding:4px 6px}
       <div style="max-width:160px"><label>끝</label><input type="date" id="sl-to"></div>
       <div><label>거래처</label><input id="sl-cust" list="custlist" placeholder="전체"></div>
     </div>
+    <div class="row" style="margin-top:10px">
+      <div style="max-width:180px"><label>월 마감 (홈택스 발행용)</label><input type="month" id="mc-month"></div>
+      <div style="flex:0"><button class="btn pri" id="mc-down">거래처별 합계 엑셀 받기</button></div>
+      <div><span class="mut">그 달 명세서를 거래처별로 합쳐 사업자번호·상호·대표자·주소·공급가액을 한 줄씩 뽑습니다(취소된 명세서 제외). 사업자번호가 없는 거래처는 맨 아래에 따로 표시합니다.</span></div>
+    </div>
   </div>
   <div class="card"><div class="wrap"><table id="sl-table"><thead><tr><th>날짜</th><th>번호</th><th>거래처</th><th>품목</th><th class="n">금액</th><th></th></tr></thead><tbody></tbody></table></div>
   <p>합계 <span class="tot" id="sl-total">0</span> 원 <span class="mut" id="sl-cnt"></span></p></div>
@@ -347,6 +352,24 @@ $('sl-table').onclick = async e=>{ const p=e.target.dataset.p, c=e.target.datase
   if(p) printSlip(db.slips.find(s=>s.id===p));
   if(c && confirm('이 명세서를 취소할까요? (지우지 않고 「취소」로 남깁니다)')){ const s=db.slips.find(s=>s.id===c); const t=new Date().toISOString(); await must(sb.from('slips').update({canceled:t}).eq('id',c)); s.canceled=t; renderSales(); } };
 
+/* ── 월 마감 (홈택스 발행용) ── */
+$('mc-down').onclick = ()=>{
+  const m=$('mc-month').value; if(!m) return alert('마감할 달을 고르세요.');
+  const live=db.slips.filter(x=>!x.canceled && x.date.startsWith(m));
+  if(!live.length) return alert(m+' 에 저장된 명세서가 없습니다.');
+  const by={}; live.forEach(x=>{ (by[x.code] ||= []).push(x); });
+  const q=v=>'"'+String(v??'').replace(/"/g,'""')+'"';
+  const head=['작성일자(말일)','거래처코드','공급받는자 사업자번호','상호','대표자','주소','업태','종목','명세서 건수','공급가액 합계','품목 요약','확인'];
+  const last=new Date(+m.slice(0,4), +m.slice(5,7), 0); const ld=m+'-'+String(last.getDate()).padStart(2,'0');
+  const rows=Object.entries(by).map(([code,list])=>{ const c=cust(code); const sum=list.reduce((a,x)=>a+x.total,0);
+    const agg={}; list.forEach(x=>x.lines.forEach(l=>{ agg[l.name]=(agg[l.name]||0)+Number(l.qty); }));
+    return {c,code,sum,n:list.length,items:Object.entries(agg).map(([k,v])=>k+' '+v).join(', '),ok:!!(c&&c.bizno)}; })
+    .sort((a,b)=>(b.ok-a.ok)||b.sum-a.sum);
+  const lines=[head.map(q).join(',')].concat(rows.map(r=>[ld,r.code,r.c?.bizno,r.c?.legal,r.c?.ceo,r.c?.addr,r.c?.type,r.c?.item,r.n,r.sum,r.items,r.ok?'':'사업자번호 없음 — 발행 전 확인'].map(q).join(',')));
+  const total=rows.reduce((a,r)=>a+r.sum,0); lines.push(['','','','합계','','','','',live.length,total,'',''].map(q).join(','));
+  const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob(['\ufeff'+lines.join('\r\n')],{type:'text/csv'})); a.download='월마감_'+m+'.csv'; a.click();
+};
+
 /* ── 원장 ── */
 ['lg-cust','lg-from','lg-to'].forEach(id=>$(id).addEventListener('input',renderLedger));
 function renderLedger(){
@@ -417,7 +440,7 @@ async function start(){
   if(!mem.data){ $('login').style.display='flex'; $('lg-msg').innerHTML = `<b style="color:var(--wine)">${session.user.email} 은 아직 등록되지 않았습니다.</b> 대표님께 이 이메일 등록을 요청하세요.`; return; }
   $('login').style.display='none'; $('who').textContent = (mem.data.name||'')+' '+session.user.email;
   try{ await load(); }catch(e){ alert('장부를 못 불러왔습니다: '+e.message); return; }
-  fillList(); $('s-date').value ||= today(); $('p-date').value ||= today(); drawLines();
+  fillList(); $('s-date').value ||= today(); $('p-date').value ||= today(); $('mc-month').value ||= today().slice(0,7); drawLines();
 }
 $('lg-in').onclick = async ()=>{ $('lg-msg').textContent='확인 중…';
   const { error } = await sb.auth.signInWithPassword({ email:$('lg-email').value.trim(), password:$('lg-pw').value });
