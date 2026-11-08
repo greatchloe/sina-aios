@@ -63,11 +63,14 @@ td input{padding:4px 6px}
   <div><b>신아 AI OS</b> <small>납품장부 · 시제품</small></div>
   <nav id="nav">
     <button data-v="slip" class="on">거래명세서</button>
+    <button data-v="orders">발주 목록</button>
     <button data-v="sales">매출장부</button>
     <button data-v="ledger">업체별 원장</button>
     <button data-v="pay">입금 관리</button>
     <button data-v="ar">미수금 현황</button>
     <button data-v="cust">거래처·단가</button>
+    <button data-v="prod">생산일지</button>
+    <button data-v="raw">원료수불부</button>
     <button data-v="set">설정·백업</button>
   </nav>
   <span id="who"></span> <button class="btn" id="reload" style="padding:3px 10px">새로고침</button> <button class="btn" id="logout" style="padding:3px 10px">나가기</button>
@@ -101,12 +104,30 @@ td input{padding:4px 6px}
       <div><button class="btn" id="s-addrow">+ 빈 줄 추가</button></div>
       <div style="text-align:right"><span class="mut">합계</span> <span class="tot" id="s-total">0</span> 원</div>
     </div>
+    <p id="s-ship" style="margin:6px 0 0;text-align:right"></p>
     <div class="row" style="margin-top:12px;justify-content:flex-end">
       <div style="flex:0"><button class="btn" id="s-clear">새로 쓰기</button></div>
+      <div style="flex:0"><button class="btn" id="s-order">발주로 저장</button></div>
       <div style="flex:0"><button class="btn pri" id="s-save">저장하고 출력</button></div>
     </div>
-    <p class="mut">저장하면 매출장부와 업체별 원장에 바로 들어갑니다. 출력은 A4 한 장에 「공급받는자용」「공급자 보관용」 두 장이 나옵니다.</p>
+    <p id="s-out" style="color:var(--wine);font-weight:bold"></p>
+    <p class="mut">「발주로 저장」은 매출에 넣지 않고 발주 목록에만 올립니다(거래일 칸 = 출고 예정일). 「저장하고 출력」을 누르면 매출장부와 업체별 원장에 바로 들어갑니다. 출력은 A4 한 장에 「공급받는자용」「공급자 보관용」 두 장이 나옵니다.</p>
   </div>
+</section>
+
+<!-- 발주 목록 -->
+<section id="v-orders" class="hidden">
+  <div class="card">
+    <h2>발주 목록 <span class="mut">(아직 매출이 아닌 주문 — 「출고하기」로 명세서를 만들면 매출이 됩니다)</span></h2>
+    <div class="row">
+      <div style="max-width:160px"><label>출고 예정일 시작</label><input type="date" id="o-from"></div>
+      <div style="max-width:160px"><label>끝</label><input type="date" id="o-to"></div>
+      <div><label>거래처</label><input id="o-cust" list="custlist" placeholder="전체"></div>
+      <div style="max-width:160px"><label>상태</label><select id="o-status"><option value="접수">출고 전(접수)</option><option value="출고">출고 완료</option><option value="취소">취소</option><option value="">전체</option></select></div>
+    </div>
+  </div>
+  <div class="card"><div class="wrap"><table id="o-table"><thead><tr><th>출고 예정일</th><th>번호</th><th>거래처</th><th>품목</th><th class="n">금액</th><th>상태</th><th></th></tr></thead><tbody></tbody></table></div>
+  <p>합계 <span class="tot" id="o-total">0</span> 원 <span class="mut" id="o-cnt"></span></p></div>
 </section>
 
 <!-- 매출장부 -->
@@ -121,7 +142,7 @@ td input{padding:4px 6px}
     <div class="row" style="margin-top:10px">
       <div style="max-width:180px"><label>월 마감 (홈택스 발행용)</label><input type="month" id="mc-month"></div>
       <div style="flex:0"><button class="btn pri" id="mc-down">거래처별 합계 엑셀 받기</button></div>
-      <div><span class="mut">그 달 명세서를 거래처별로 합쳐 사업자번호·상호·대표자·주소·공급가액을 한 줄씩 뽑습니다(취소된 명세서 제외). 사업자번호가 없는 거래처는 맨 아래에 따로 표시합니다.</span></div>
+      <div><span class="mut">그 달 명세서를 거래처별로 합쳐 사업자번호·상호·대표자·주소·공급가액을 한 줄씩 뽑습니다(취소된 명세서 제외). 사업자번호가 없거나 검증식에 맞지 않는 거래처는 맨 아래에 따로 표시합니다.</span></div>
     </div>
   </div>
   <div class="card"><div class="wrap"><table id="sl-table"><thead><tr><th>날짜</th><th>번호</th><th>거래처</th><th>품목</th><th class="n">금액</th><th></th></tr></thead><tbody></tbody></table></div>
@@ -156,6 +177,11 @@ td input{padding:4px 6px}
     </div>
     <p id="p-bal" class="mut"></p>
   </div>
+  <div class="card"><h2>은행 입금 문자 읽기 <span class="mut">(여러 건을 한 번에 붙여넣어도 됨)</span></h2>
+    <textarea id="pm-text" rows="4" placeholder="[Web발신] 은행 입금 알림 문자를 그대로 붙여넣으세요"></textarea>
+    <div style="margin-top:6px"><button class="btn pri" id="pm-read">문자 읽기</button> <span id="pm-msg" class="mut"></span></div>
+    <div id="pm-body" style="margin-top:10px"></div>
+  </div>
   <div class="card"><h2>최근 입금</h2><div class="wrap"><table id="p-table"><thead><tr><th>입금일</th><th>거래처</th><th class="n">금액</th><th>방법</th><th>메모</th><th></th></tr></thead><tbody></tbody></table></div></div>
 </section>
 
@@ -163,7 +189,17 @@ td input{padding:4px 6px}
 <section id="v-ar" class="hidden">
   <div class="card"><h2>미수금 현황 <span class="mut">(기초잔액 + 매출 − 입금)</span></h2>
   <div class="wrap"><table id="ar-table"><thead><tr><th>거래처</th><th class="n">기초잔액</th><th class="n">매출</th><th class="n">입금</th><th class="n">잔액</th><th>마지막 거래</th><th>마지막 입금</th></tr></thead><tbody></tbody></table></div>
-  <p>미수금 합계 <span class="tot" id="ar-total">0</span> 원</p></div>
+  <p>미수금 합계 <span class="tot" id="ar-total">0</span> 원 <span class="mut" id="ar-od"></span></p></div>
+  <div class="card"><h2>기초잔액 일괄 입력 <span class="mut">(새 장부 시작 때 한 번 — Kaiser 거래처별 미수금 현황을 복사해 붙여넣기)</span></h2>
+    <div class="row">
+      <div style="max-width:180px"><label>전환 기준일 (이날부터 새 장부로 잔액 계산)</label><input type="date" id="ob-date"></div>
+      <div><span class="mut">기초잔액 = 기준일 전날 끝 미수금. 기준일 전의 명세서·입금은 장부에 남지만 잔액 계산에서는 빠집니다(이중 계산 방지).</span></div>
+    </div>
+    <label style="margin-top:8px">한 줄에 거래처(코드나 이름)와 금액. 예) 30001 ○○식당 본점 1,234,000</label>
+    <textarea id="ob-text" rows="5"></textarea>
+    <div style="margin-top:6px"><button class="btn pri" id="ob-read">읽어서 비교</button> <span id="ob-msg" class="mut"></span></div>
+    <div id="ob-body" style="margin-top:10px"></div>
+  </div>
 </section>
 
 <!-- 거래처 -->
@@ -171,7 +207,75 @@ td input{padding:4px 6px}
   <div class="card"><h2>거래처·단가</h2>
     <div class="row"><div><label>거래처</label><input id="c-cust" list="custlist"></div></div>
     <div id="c-body" style="margin-top:10px"></div>
+    <div id="c-ship" style="margin-top:14px"></div>
   </div>
+</section>
+
+<!-- 생산일지 -->
+<section id="v-prod" class="hidden">
+  <div class="card">
+    <h2>생산 등록 <span class="mut">(배합비 × 로스계수 <span id="pr-loss"></span>로 원료를 자동 차감)</span></h2>
+    <div class="row">
+      <div style="max-width:160px"><label>생산일</label><input type="date" id="pr-date"></div>
+      <div><label>메모</label><input id="pr-memo"></div>
+    </div>
+    <div style="margin-top:10px">
+      <label>취합기 합계표·작업지시 붙여넣기 (품목 이름 + kg. 예: 포기 120 / 백김치 30 / 쪽파 15.5)</label>
+      <textarea id="pr-paste" rows="4"></textarea>
+      <div style="margin-top:6px"><button class="btn pri" id="pr-read">읽어서 채우기</button> <button class="btn" id="pr-addrow">+ 빈 줄 추가</button> <span id="pr-msg" class="mut"></span></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="wrap"><table id="pr-table"><thead><tr><th>품목(배합비 이름)</th><th class="n">생산량 kg</th><th>투입 원료 (kg)</th><th></th></tr></thead><tbody></tbody></table></div>
+    <datalist id="recipelist"></datalist>
+    <div class="row" style="margin-top:10px;justify-content:flex-end">
+      <div style="flex:0"><button class="btn" id="pr-clear">새로 쓰기</button></div>
+      <div style="flex:0"><button class="btn pri" id="pr-save">생산 저장</button></div>
+    </div>
+    <p class="mut">배합비가 없는 품목은 빨간 글씨로 표시되고 저장되지 않습니다. 배합비는 품목제조보고서 기준(설정 「recipes」)입니다.</p>
+  </div>
+  <div class="card">
+    <h2>생산일지</h2>
+    <div class="row">
+      <div style="max-width:160px"><label>시작</label><input type="date" id="pl-from"></div>
+      <div style="max-width:160px"><label>끝</label><input type="date" id="pl-to"></div>
+      <div style="flex:0"><button class="btn" id="pl-print">생산일지 출력</button></div>
+    </div>
+    <div class="wrap" style="margin-top:10px"><table id="pl-table"><thead><tr><th>생산일</th><th>번호</th><th>품목</th><th class="n">생산량 kg</th><th>투입 원료</th><th>메모</th><th></th></tr></thead><tbody></tbody></table></div>
+    <p>합계 <span class="tot" id="pl-total">0</span> kg <span class="mut" id="pl-cnt"></span></p>
+  </div>
+</section>
+
+<!-- 원료수불부 -->
+<section id="v-raw" class="hidden">
+  <div class="card">
+    <h2>원료 입고·기초·조정</h2>
+    <div class="row">
+      <div style="max-width:160px"><label>날짜</label><input type="date" id="rw-date"></div>
+      <div style="max-width:120px"><label>구분</label><select id="rw-kind"><option>입고</option><option>기초</option><option>조정</option></select></div>
+      <div><label>원료</label><input id="rw-raw" list="rawlist"></div>
+      <div style="max-width:120px"><label>수량</label><input id="rw-qty" inputmode="decimal"></div>
+      <div style="max-width:90px"><label>단위</label><select id="rw-unit"><option>kg</option><option>망</option></select></div>
+      <div><label>매입처</label><input id="rw-sup"></div>
+      <div style="max-width:120px"><label>단가(단위당)</label><input id="rw-price" inputmode="numeric"></div>
+      <div><label>메모</label><input id="rw-memo"></div>
+      <div style="flex:0"><button class="btn pri" id="rw-save">저장</button></div>
+    </div>
+    <datalist id="rawlist"></datalist>
+    <p class="mut" id="rw-conv"></p>
+    <p class="mut">조정은 실사 차이(+/−)를 넣습니다. 매입 명세서 사진 읽기는 다음 단계에서 이 칸을 자동으로 채웁니다.</p>
+  </div>
+  <div class="card">
+    <h2>원료수불부 <span class="mut">(이월 + 입고 − 사용 ± 조정 = 재고)</span></h2>
+    <div class="row">
+      <div style="max-width:160px"><label>시작</label><input type="date" id="rb-from"></div>
+      <div style="max-width:160px"><label>끝</label><input type="date" id="rb-to"></div>
+      <div><label>원료 한 가지만 날짜별로 보기</label><input id="rb-raw" list="rawlist" placeholder="전체"></div>
+      <div style="flex:0"><button class="btn" id="rb-print">수불부 출력</button></div>
+    </div>
+  </div>
+  <div class="card" id="rb-body"></div>
+  <div class="card"><h2>최근 입고·조정</h2><div class="wrap"><table id="rw-table"><thead><tr><th>날짜</th><th>구분</th><th>원료</th><th class="n">수량</th><th>매입처</th><th class="n">금액</th><th>메모</th><th></th></tr></thead><tbody></tbody></table></div></div>
 </section>
 
 <!-- 설정 -->
@@ -201,16 +305,23 @@ const today = () => new Date(Date.now()-new Date().getTimezoneOffset()*60000).to
 const $ = id => document.getElementById(id);
 let db;
 async function load(){
-  const [me, al, cs, sl, py] = await Promise.all([
+  const [me, al, cs, sl, py, st, pr, rw, od] = await Promise.all([
     sb.from('settings').select('value').eq('key','me').maybeSingle(),
     sb.from('settings').select('value').eq('key','cust_alias').maybeSingle(),
     sb.from('customers').select('*').order('code'),
     sb.from('slips').select('*').order('date').range(0, 49999),
-    sb.from('pays').select('*').order('date').range(0, 49999)]);
-  const err = [me,al,cs,sl,py].find(r=>r.error); if(err) throw err.error;
+    sb.from('pays').select('*').order('date').range(0, 49999),
+    sb.from('settings').select('key,value').in('key',['recipes','prod_alias','raw_conv','loss','ship_rules','pay_alias','opening_date','raw_pack']),
+    sb.from('prods').select('*').order('date').range(0, 49999),
+    sb.from('raw_moves').select('*').order('date').range(0, 49999),
+    sb.from('orders').select('*').order('date').range(0, 49999)]);
+  const err = [me,al,cs,sl,py,st,pr,rw,od].find(r=>r.error); if(err) throw err.error;
   CUST_ALIAS = al.data?.value || {};
+  const S = Object.fromEntries(st.data.map(r=>[r.key, r.value]));
   db = {me: me.data?.value || {}, customers: cs.data.map(c=>({...c, opening:Number(c.opening)||0, items:c.items||[]})),
-        slips: sl.data.map(x=>({...x, total:Number(x.total)})), pays: py.data.map(x=>({...x, amt:Number(x.amt)}))};
+        slips: sl.data.map(x=>({...x, total:Number(x.total)})), pays: py.data.map(x=>({...x, amt:Number(x.amt)})),
+        orders: od.data, rawPack: S.raw_pack || null, openingDate: S.opening_date || null, payAlias: S.pay_alias || {}, shipRules: S.ship_rules || {}, recipes: S.recipes || {}, prodAlias: S.prod_alias || {}, rawConv: S.raw_conv || {}, loss: Number(S.loss) || 1.09,
+        prods: pr.data.map(x=>({...x, kg:Number(x.kg)})), raws: rw.data.map(x=>({...x, qty:Number(x.qty), amt:Number(x.amt)||0}))};
 }
 async function must(q){ const r = await q; if(r.error){ alert('저장 실패: '+r.error.message); throw r.error; } return r.data; }
 const cust = code => db.customers.find(c=>c.code===code);
@@ -228,19 +339,23 @@ function fillList(){ $('custlist').innerHTML = db.customers.map(c=>`<option valu
 $('nav').onclick = e=>{ const v=e.target.dataset.v; if(!v) return;
   document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));
   document.querySelectorAll('main>section').forEach(s=>s.classList.toggle('hidden',s.id!=='v-'+v));
-  ({sales:renderSales,ledger:renderLedger,pay:renderPays,ar:renderAR,cust:renderCust,set:renderSet}[v]||(()=>{}))(); };
+  ({orders:renderOrders,sales:renderSales,ledger:renderLedger,pay:renderPays,ar:renderAR,cust:renderCust,prod:renderProd,raw:renderRaw,set:renderSet}[v]||(()=>{}))(); };
 
 /* ── 거래명세서 ── */
 let cur = null, lines = [];
 function setCust(){
   cur = findCust($('s-cust').value);
+  if((cur?.code||null)!==shipCustCode){ shipCustCode=cur?.code||null; shipManual=false;
+    if(outOrder && cur?.code!==outOrder.code){ outOrder=null; showOutOrder(); }   // 다른 거래처로 바꾸면 발주 연결을 끊는다
+    drawLines(); }   // 거래처가 바뀌면 그 거래처 택배비 기준으로 다시 계산
   if(!cur){ $('s-info').textContent = $('s-cust').value ? '거래처를 정확히 고르세요(목록에서 선택).' : ''; $('s-chips').innerHTML=''; return; }
-  $('s-info').innerHTML = `<b>${cur.legal}</b> · 대표 ${cur.ceo||'-'} · ${cur.bizno||'사업자번호 없음'} · ${cur.addr||'주소 없음'} &nbsp; <span class="pill">현재 잔액 ${won(balance(cur.code))}원</span>`;
+  $('s-info').innerHTML = `<b>${cur.legal}</b> · 대표 ${cur.ceo||'-'} · ${cur.bizno||'사업자번호 없음'}${bizNoValid(cur.bizno)===false?' <b style="color:var(--wine)">(번호 오류 — 거래처·단가에서 확인)</b>':''} · ${cur.addr||'주소 없음'} &nbsp; <span class="pill">현재 잔액 ${won(balance(cur.code))}원</span>`;
   $('s-chips').innerHTML = cur.items.length ? '<span class="mut">이 거래처 품목(누르면 추가) </span>' + cur.items.map((it,i)=>`<button data-i="${i}">${it.name}${it.spec?' '+it.spec:''} · ${won(it.price)}</button>`).join('')
                                             : '<span class="mut">등록된 품목이 없습니다. 빈 줄 추가로 직접 쓰세요.</span>';
 }
 $('s-cust').addEventListener('change', setCust); $('s-cust').addEventListener('input', setCust);
 $('s-chips').onclick = e=>{ const i=e.target.dataset.i; if(i===undefined) return; const it=cur.items[i];
+  if(lines.some(l=>l._qtyText!==undefined)) return alert('잘못된 수량을 먼저 수정하세요.');
   const ex = lines.find(l=>l.name===it.name && l.spec===it.spec); if(ex){ ex.qty+=1; } else lines.push({name:it.name,spec:it.spec,unit:it.unit,qty:1,price:it.price});
   drawLines(true); };
 /* ── 카톡 주문 읽기 (노트북 매칭.py 와 같은 방식: 확실하지 않으면 추측하지 않고 알린다) ── */
@@ -251,66 +366,287 @@ const ITEM_ALIAS = {"김":"포기","김치":"포기","포기":"포기","포기�
   "슬라이스":"슬라이스","볶음김치":"볶음김치","오말랭이":"오말랭이","말랭이":"오말랭이","택배":"택배비","택배비":"택배비","샬롯":"샬롯","깻잎":"깻잎","명이":"명이","고추채":"고추채","쌈무":"쌈무"};
 let CUST_ALIAS = {};   // 거래처 줄임말은 클라우드 설정(cust_alias)에서 읽는다 — 코드에 회사 정보를 두지 않는다
 const norm = s => s.replace(/\(수입\)/g,'').replace(/\d+(\.\d+)?\s*(키로|kg|KG|그람|g)/g,'').replace(/[\s()]/g,'');
+// 글에 나온 거래처를 찾는다. 두 곳 이상이면 multiple, 짧은 이름이 여러 지점에 걸치면 ambiguous — 어느 경우든 고르지 않는다.
 function custFromText(t){
-  const flat = t.replace(/\s/g,''); let best=null, len=0;
-  db.customers.forEach(c=>[c.name,c.legal,c.name.replace(/\(주\)|주식회사/g,'')].forEach(k=>{ k=(k||'').replace(/\s/g,''); if(k.length>=2 && flat.includes(k) && k.length>len){ best=c; len=k.length; } }));
-  Object.entries(CUST_ALIAS).forEach(([k,code])=>{ if(flat.includes(k) && k.length>len){ best=cust(code); len=k.length; } });
-  return best;
+  const flat = t.replace(/\s/g,''), hits=[];
+  const add=(c,k)=>{ k=(k||'').replace(/\s/g,''); if(!c || k.length<2) return; for(let p=flat.indexOf(k); p>=0; p=flat.indexOf(k,p+1)) hits.push({c,k,s:p,e:p+k.length}); };
+  db.customers.forEach(c=>[c.name,c.legal,c.name.replace(/\(주\)|주식회사/g,'')].forEach(k=>add(c,k)));
+  Object.entries(CUST_ALIAS).forEach(([k,code])=>add(cust(code),k));
+  // 더 긴 이름 안에 들어 있는 짧은 이름은 버린다 (「○○식당본점」 안의 「○○식당」)
+  const kept = hits.filter(h=>!hits.some(o=>o!==h && o.s<=h.s && o.e>=h.e && o.k.length>h.k.length));
+  const keys = [...new Set(kept.map(h=>h.k))], codes = [...new Set(kept.map(h=>h.c.code))];
+  if(codes.length>1) return {c:null, keys, multiple:codes.map(code=>cust(code).name)};
+  if(!codes.length) return {c:null, keys};
+  const key = kept.reduce((a,h)=>h.k.length>a.k.length?h:a).k;
+  const share = db.customers.filter(c=>[c.name,c.legal].some(n=>(n||'').replace(/\s/g,'').includes(key)));
+  return share.length>1 ? {c:null, keys, key, ambiguous:share} : {c:kept[0].c, keys};
 }
-function itemFor(c, word){
-  const w = word.replace(/\s/g,''); const key = ITEM_ALIAS[w] || w;
-  const hits = c.items.filter(it=>{ const n=norm(it.name); return n===key || n.includes(key) || (key.length>=2 && key.includes(n)); });
-  if(hits.length===1) return hits[0];
-  if(hits.length>1){ const ex=hits.find(it=>norm(it.name)===key); if(ex) return ex;   // 「백김치」와 「(수입)백김치」가 둘 다 있으면 가장 많이 쓴 것
-    return hits.slice().sort((a,b)=>(b.n||0)-(a.n||0))[0]; }
-  return null;
+const KG_UNIT = u => u==='그람'||u==='g' ? 1/1000 : 1;
+function itemKg(it){ const m=(String(it.name??'')+' '+String(it.spec??'')).match(/(\d+(?:\.\d+)?)\s*(키로|킬로|kg|KG|Kg|그람|g)/); return m ? Number(m[1])*KG_UNIT(m[2]) : null; }
+const isImported = it => /\(수입\)/.test(it.name);
+// 품목 찾기. 「수입」「국산」을 붙이면 그것만, 무게를 쓰면 그 규격만 고른다. 못 고르면 why 에 이유를 담는다.
+function itemFor(c, word, kg){
+  let w = word.replace(/\s/g,''), origin = null;
+  const o = w.match(/^(수입|중국산|중국|국산|국내산)(.+)$/); if(o){ origin = /^(수입|중국)/.test(o[1]) ? '수입' : '국산'; w = o[2]; }
+  const key = ITEM_ALIAS[w] || w;
+  let hits = c.items.filter(it=>{ const n=norm(it.name); return n===key || n.includes(key) || (key.length>=2 && key.includes(n)); });
+  if(!hits.length) return {why:'이 거래처 품목에 없음'};
+  if(origin){ hits = hits.filter(it=>isImported(it)===(origin==='수입')); if(!hits.length) return {why:origin+' 품목이 이 거래처 목록에 없음'}; }
+  if(kg!=null){ hits = hits.filter(it=>itemKg(it)===kg); if(!hits.length) return {why:kg+'kg 규격이 이 거래처 목록에 없음'}; }
+  const exact = hits.filter(it=>norm(it.name)===key), pool = exact.length ? exact : hits;
+  const it = pool.slice().sort((a,b)=>(b.n||0)-(a.n||0))[0];   // 여러 개면 가장 많이 쓴 것
+  return {it, guessedOrigin: !origin && pool.some(isImported) && pool.some(x=>!isImported(x))};
 }
+const KAKAO_ITEM_RE = /([가-힣A-Za-z]{1,12})\s*(\d+(?:\.\d+)?)\s*(?:(키로|킬로|kg|KG|Kg|그람|g)(?:짜리)?(?:\s*[xX×*]?\s*(\d+(?:\.\d+)?)\s*(?:박스|개|EA|ea|통|봉|팩|box|BOX)?)?|(?:박스|개|EA|ea|통|봉|팩|box|BOX))?/g;
 $('s-read').onclick = ()=>{
   const t = $('s-kakao').value.trim(); if(!t) return;
-  let c = custFromText(t) || cur;
+  if(lines.some(l=>l._qtyText!==undefined)) return alert('잘못된 수량을 먼저 수정하세요.');
+  if(/\d,\d|\d\.\d*\.|\d[eE][+-]?\d|[+-]\s*\d/.test(t)) return alert('자동 해석이 불명확한 숫자 표기입니다. 수량을 직접 입력하세요.');
+  const found = custFromText(t);
+  if(found.multiple){ $('s-readmsg').innerHTML = `<b style="color:var(--wine)">거래처가 ${found.multiple.length}곳(${found.multiple.join(', ')}) 들어 있습니다. 한 거래처씩 나눠서 붙여넣으세요.</b>`; return; }
+  let c = found.c;
+  if(!c && found.ambiguous){
+    if(cur && found.ambiguous.some(x=>x.code===cur.code)) c = cur;
+    else { $('s-readmsg').innerHTML = `<b style="color:var(--wine)">「${found.key}」는 ${found.ambiguous.map(x=>x.name).join(', ')} 중 어디인지 알 수 없습니다. 위 거래처 칸에서 지점을 먼저 고른 뒤 다시 누르세요.</b>`; return; }
+  }
+  c = c || cur;
   if(!c){ $('s-readmsg').textContent = '거래처를 못 찾았습니다. 위 거래처 칸에서 먼저 고르세요.'; return; }
   if(!cur || cur.code!==c.code){ $('s-cust').value = c.code+' '+c.name; setCust(); }
-  let body = t; [c.name,c.legal].concat(Object.keys(CUST_ALIAS).filter(k=>CUST_ALIAS[k]===c.code)).sort((a,b)=>b.length-a.length).forEach(k=>{ if(k) body = body.split(k).join(' '); });
-  body = body.replace(/(\d+)\s*(키로|kg|KG|그람|g)\b/g,' ').replace(/[\/,·]/g,' ');
-  const re = /([가-힣A-Za-z]{1,12})\s*(\d+(?:\.\d+)?)\s*(?:박스|개|EA|ea|통|봉|팩|box|BOX)?/g; let m, ok=0; const miss=[];
-  while((m=re.exec(body))){ const it=itemFor(c,m[1]); const q=parseFloat(m[2]);
-    if(!it){ miss.push(m[1]+' '+m[2]); continue; }
+  let body = t;
+  [c.name,c.legal,...found.keys,...Object.keys(CUST_ALIAS).filter(k=>CUST_ALIAS[k]===c.code)].filter(Boolean).sort((a,b)=>b.length-a.length)
+    .forEach(k=>{ body = body.replace(new RegExp(k.replace(/\s/g,'').split('').map(ch=>ch.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('\\s*'),'g'),' '); });
+  body = body.replace(/(수입|국산|국내산|중국산)\s+(?=[가-힣])/g,'$1').replace(/[\/,·]/g,' ');
+  let m, ok=0; const miss=[], notes=[]; KAKAO_ITEM_RE.lastIndex = 0;
+  while((m=KAKAO_ITEM_RE.exec(body))){
+    let kg = null, q = parseFloat(m[2]);
+    if(m[3]){ kg = Number(m[2])*KG_UNIT(m[3]);
+      if(m[4]===undefined){ miss.push(`${m[0].trim()} (몇 개인지 없음)`); continue; }
+      q = parseFloat(m[4]); }
+    const r = itemFor(c, m[1], kg);
+    if(!r.it){ miss.push(`${m[0].trim()} (${r.why})`); continue; }
+    const it = r.it;
+    if(shipRuleFor(c) && /택배/.test(it.name)){ notes.push(`글의 「${m[0].trim()}」은 넣지 않고 거래처 택배비 기준으로 자동 계산합니다`); continue; }
+    if(r.guessedOrigin) notes.push(`${m[1]} → 수입·국산이 둘 다 있어 많이 쓴 「${it.name}」로 넣음`);
     const ex=lines.find(l=>l.name===it.name&&l.spec===it.spec); if(ex) ex.qty+=q; else lines.push({name:it.name,spec:it.spec,unit:it.unit,qty:q,price:it.price}); ok++; }
   drawLines();
-  $('s-readmsg').innerHTML = `${c.name} · ${ok}개 품목을 기존 단가로 넣었습니다.` + (miss.length?` <b style="color:var(--wine)">못 읽은 것: ${miss.join(', ')} — 아래 품목 버튼이나 빈 줄로 직접 넣어 주세요.</b>`:'');
+  $('s-readmsg').innerHTML = `${c.name} · ${ok}개 품목을 기존 단가로 넣었습니다.`
+    + (notes.length?` <b style="color:var(--gold)">확인: ${notes.join(' / ')}</b>`:'')
+    + (miss.length?` <b style="color:var(--wine)">못 읽은 것: ${miss.join(', ')} — 아래 품목 버튼이나 빈 줄로 직접 넣어 주세요.</b>`:'');
 };
+
+/* ── 택배비 자동 계산: 거래처별 기준(settings 「ship_rules」)으로 맨 아래 택배비 줄을 만든다 ── */
+// 기준은 2026-07~10 전표 459건에서 찾은 것(452건 일치). 근거: 업무도구/결과/거래처별_택배비_기준_20261105.xlsx
+const SHIP_TYPES = {
+  '박스마다': '무게와 상관없이 박스마다 부과. 10kg 이상은 1개당 1박스, 10kg 미만은 10kg 단위로 묶어 1박스',
+  '100kg면제형': '무채·얼갈이·열무물 합계 100kg 이상이면 이 3품목 무료, 미만이면 개당 부과. 장아찌는 2개당 1건(올림), 오말랭이 20kg는 개당 1건(별도 단가), 김치양념은 100kg 미만일 때 3개당 1건',
+  '장아찌만': '장아찌 개수만큼 부과(다른 품목은 무료)',
+  '없음': '택배비를 받지 않음'};
+function shipGroup(name){
+  const t=String(name??'').replace(/\s/g,'');
+  if(/열무물|얼갈이|무채/.test(t) && /10키로|10kg/i.test(t)) return 'A';
+  if(/오말랭이/.test(t) && /20/.test(t)) return 'O';
+  if(/장아찌|짱아찌|궁채|쫑/.test(t)) return 'J';
+  if(/김치양념/.test(t)) return 'Y';
+  return 'X';
+}
+function shipKg(name, spec){
+  const t=String(spec??'')+' '+String(name??'');
+  let m=t.match(/(\d+(?:\.\d+)?)\s*(?:키로|kg|KG|Kg)/); if(m) return Number(m[1]);
+  m=t.match(/(\d+)\s*(?:그람|g)(?![A-Za-z0-9가-힣])/); if(m) return Number(m[1])/1000;
+  return /장아찌|짱아찌/.test(String(name??'')) ? 10 : null;
+}
+// 택배비 줄 목록 [{spec, qty, price}] 을 돌려준다. 택배비 줄 자신은 계산에서 뺀다.
+function shipFee(rule, ls){
+  if(!rule || rule.type==='없음') return [];
+  const items=ls.filter(l=>!/택배/.test(String(l.name??''))), price=Number(rule.price)||0, c={A:0,O:0,J:0,Y:0,X:0};
+  items.forEach(l=>{ c[shipGroup(l.name)]+=Number(l.qty)||0; });
+  const out=[], add=(qty,p,spec='')=>{ if(qty>0) out.push({spec,qty,price:p}); };
+  if(rule.type==='100kg면제형'){
+    const under=c.A*10<100;
+    add((under?c.A:0)+Math.ceil(c.J/2)+(under?Math.ceil(c.Y/3):0), price);
+    add(c.O, Number(rule.omPrice)||price, '오말랭이 20kg');
+  } else if(rule.type==='박스마다'){
+    let boxes=0, small=0;
+    items.forEach(l=>{ const k=shipKg(l.name,l.spec), q=Number(l.qty)||0; if(k===null || k>=10) boxes+=q; else small+=k*q; });
+    add(boxes+Math.ceil(small/10-1e-9), price);
+  } else if(rule.type==='장아찌만') add(c.J, price);
+  return out;
+}
+let shipManual=false, shipCustCode=null;
+const shipRuleFor = c => c ? (db.shipRules||{})[c.code]||null : null;
+const shipSig = () => JSON.stringify(lines.filter(l=>l._auto).map(l=>[l.spec,l.qty,l.price]));
+// 자동 택배비 줄을 다시 계산한다. 직접 넣거나 고친 택배비가 있으면 건드리지 않는다. 바뀌었으면 true.
+function syncShipLines(){
+  const rule=shipRuleFor(cur), before=shipSig();
+  if(!rule || shipManual || lines.some(l=>!l._auto && /택배/.test(String(l.name??'')))){ if(!rule) lines=lines.filter(l=>!l._auto); return shipSig()!==before; }
+  lines=lines.filter(l=>!l._auto);
+  shipFee(rule, lines).forEach(f=>lines.push({name:'택배비',spec:f.spec,unit:'EA',qty:f.qty,price:f.price,_auto:true}));
+  return shipSig()!==before;
+}
+function shipNote(){
+  const rule=shipRuleFor(cur); if(!cur) return '';
+  if(!rule) return '<span class="mut">이 거래처는 택배비 기준이 등록되지 않아 자동 계산하지 않습니다(거래처·단가 화면에서 등록).</span>';
+  const fee=shipFee(rule, lines), want=fee.reduce((a,f)=>a+f.qty*f.price,0);
+  const label=`택배비 기준 「${rule.type}」${rule.type==='없음'?'':' '+won(rule.price)+'원'}`;
+  const manual=lines.filter(l=>!l._auto && /택배/.test(String(l.name??''))), have=manual.reduce((a,l)=>a+(Number(l.qty)||0)*(Number(l.price)||0),0);
+  if(shipManual || manual.length) return `<span style="color:${have===want?'var(--mut)':'var(--wine)'}">${label} · 직접 입력 ${won(have)}원 / 기준 계산 ${won(want)}원${have===want?'':' — 차이 확인'}</span>`;
+  return `<span class="mut">${label} · 자동 ${fee.length?fee.map(f=>`${f.spec?f.spec+' ':''}${f.qty}건×${won(f.price)}`).join(', '):'0원'}</span>`;
+}
 
 $('s-addrow').onclick =()=>{ lines.push({name:'',spec:'',unit:'EA',qty:1,price:0}); drawLines(); };
 function drawLines(focusLast){
+  syncShipLines();
+  const prices=lines.map(l=>parseUnitPriceWon(String(l.price??'')));
   const tb = $('s-table').tBodies[0];
   tb.innerHTML = lines.map((l,i)=>`<tr>
-    <td><input data-i="${i}" data-k="name" value="${l.name}"></td><td><input data-i="${i}" data-k="spec" value="${l.spec}" style="width:80px"></td>
-    <td><input data-i="${i}" data-k="unit" value="${l.unit}" style="width:60px"></td>
-    <td class="n"><input data-i="${i}" data-k="qty" value="${l.qty}" inputmode="decimal" style="width:70px;text-align:right"></td>
-    <td class="n"><input data-i="${i}" data-k="price" value="${l.price}" inputmode="numeric" style="width:100px;text-align:right"></td>
-    <td class="n">${won(l.qty*l.price)}</td><td><button class="btn warn" data-del="${i}">×</button></td></tr>`).join('');
-  $('s-total').textContent = won(lines.reduce((a,l)=>a+l.qty*l.price,0));
-  if(focusLast){ const q=tb.querySelectorAll('input[data-k=qty]'); if(q.length){ q[q.length-1].focus(); q[q.length-1].select(); } }
+    <td><input data-i="${i}" data-k="name" value="${String(l.name??'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;')}"></td><td><input data-i="${i}" data-k="spec" value="${String(l.spec??'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;')}" style="width:80px"></td>
+    <td><input data-i="${i}" data-k="unit" value="${String(l.unit??'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;')}" style="width:60px"></td>
+    <td class="n"><input data-i="${i}" data-k="qty" value="${String(l._qtyText??l.qty).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;')}" inputmode="decimal" style="width:70px;text-align:right"></td>
+    <td class="n"><input data-i="${i}" data-k="price" value="${String(l.price??'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;')}" inputmode="numeric" style="width:100px;text-align:right"></td>
+    <td class="n">${l._qtyText!==undefined?'수량 확인':prices[i]===null?'단가 확인':won(l.qty*prices[i])}</td><td><button class="btn warn" data-del="${i}">×</button></td></tr>`).join('');
+  $('s-total').textContent = lines.some(l=>l._qtyText!==undefined)?'수량 확인':prices.some(p=>p===null)?'단가 확인':won(lines.reduce((a,l,i)=>a+Math.round(l.qty*prices[i]),0));
+  $('s-ship').innerHTML = shipNote();
+  if(focusLast){ const q=[...tb.querySelectorAll('input[data-k=qty]')].filter(e=>!lines[e.dataset.i]?._auto); if(q.length){ q[q.length-1].focus(); q[q.length-1].select(); } }
 }
+// 품목·수량을 고친 칸에서 나가면 택배비를 다시 계산한다(바뀐 경우에만 다시 그리고 커서는 제자리로).
+$('s-table').addEventListener('change', ()=>setTimeout(()=>{
+  const a=document.activeElement, ai=a?.dataset?.i, ak=a?.dataset?.k;
+  if(!syncShipLines()){ $('s-ship').innerHTML=shipNote(); return; }
+  drawLines(); if(ai!==undefined) $('s-table').querySelector(`input[data-i="${ai}"][data-k="${ak}"]`)?.focus();
+},0));
 $('s-table').addEventListener('input', e=>{ const i=e.target.dataset.i,k=e.target.dataset.k; if(i===undefined) return;
-  lines[i][k] = (k==='qty'||k==='price') ? (parseFloat(e.target.value.replace(/,/g,''))||0) : e.target.value;
-  const r=e.target.closest('tr'); r.cells[5].textContent=won(lines[i].qty*lines[i].price);
-  $('s-total').textContent = won(lines.reduce((a,l)=>a+l.qty*l.price,0)); });
-$('s-table').addEventListener('click', e=>{ const d=e.target.dataset.del; if(d===undefined) return; lines.splice(d,1); drawLines(); });
-$('s-clear').onclick = ()=>{ lines=[]; $('s-cust').value=''; $('s-memo').value=''; setCust(); drawLines(); };
+  if(lines[i]._auto){ delete lines[i]._auto; shipManual=true; }   // 자동 택배비 줄을 손으로 고치면 그 뒤로는 자동 계산하지 않는다
+  if(k==='qty'){
+    const qty=e.target.value.trim()===''?0:parseRawQuantityKg(e.target.value);
+    lines[i].qty=qty;
+    if(qty===null) lines[i]._qtyText=e.target.value; else delete lines[i]._qtyText;
+  } else lines[i][k]=e.target.value;
+  const price=parseUnitPriceWon(String(lines[i].price??''));
+  const r=e.target.closest('tr'); r.cells[5].textContent=lines[i]._qtyText!==undefined?'수량 확인':price===null?'단가 확인':won(lines[i].qty*price);
+  const prices=lines.map(l=>parseUnitPriceWon(String(l.price??'')));
+  $('s-total').textContent = lines.some(l=>l._qtyText!==undefined)?'수량 확인':prices.some(p=>p===null)?'단가 확인':won(lines.reduce((a,l,j)=>a+Math.round(l.qty*prices[j]),0)); });
+$('s-table').addEventListener('click', e=>{ const d=e.target.dataset.del; if(d===undefined) return; if(lines[d]._auto) shipManual=true; lines.splice(d,1); drawLines(); });
+$('s-clear').onclick = ()=>{ lines=[]; shipManual=false; outOrder=null; showOutOrder(); $('s-cust').value=''; $('s-memo').value=''; setCust(); drawLines(); };
+// 명세서·발주 저장 공통 입력 검사. 문제가 있으면 알리고 null, 통과하면 저장할 줄 목록.
+function checkedLines(){
+  if(!cur){ alert('거래처를 먼저 고르세요.'); return null; }
+  if(lines.some(l=>l._qtyText!==undefined || !Number.isFinite(l.qty))){ alert('잘못된 수량을 먼저 수정하세요.'); return null; }
+  const prices=lines.map(l=>parseUnitPriceWon(String(l.price??'')));
+  if(prices.some(p=>p===null)){ alert('단가 형식을 확인하세요. 숫자와 올바른 천 단위 쉼표만 입력하세요.'); return null; }
+  if(lines.some(l=>!l.name.trim() || l.qty===0)){ alert('품명 또는 수량이 없는 행을 수정하거나 삭제하세요. 일부 행만 저장하지 않습니다.'); return null; }
+  const ls = lines.map(({_auto,...l},i)=>({...l,price:prices[i]}));
+  const amounts=ls.map(l=>Math.round(l.qty*l.price));
+  if(amounts.some(a=>!Number.isSafeInteger(a)) || !Number.isSafeInteger(amounts.reduce((a,b)=>a+b,0))){ alert('계산 금액이 안전한 범위를 넘습니다. 수량과 단가를 확인하세요.'); return null; }
+  if(!ls.length){ alert('품목을 하나 이상 넣으세요.'); return null; }
+  const zero=zeroPriceLines(ls);
+  if(zero.length && !confirm(`단가가 0원인 줄이 있습니다: ${zero.join(', ')}\n\n단가 칸이 비어 있어도 0원이 됩니다. 무상(샘플·서비스)이 맞을 때만 「확인」을 누르세요.`)) return null;
+  return ls;
+}
 $('s-save').onclick = async ()=>{
-  if(!cur) return alert('거래처를 먼저 고르세요.');
-  const ls = lines.filter(l=>l.name && l.qty);
-  if(!ls.length) return alert('품목을 하나 이상 넣으세요.');
+  if($('s-save').disabled) return;
+  const ls=checkedLines(); if(!ls) return;
+  const dup=sameDaySlips(db.slips, cur.code, $('s-date').value||today(), ls);
+  if(dup.identical.length && !confirm(`같은 날 ${cur.name}에 품목·수량·단가가 똑같은 명세서가 이미 있습니다 (번호 ${dup.identical.map(s=>s.id).join(', ')}).\n\n중복 저장일 가능성이 큽니다. 정말 한 번 더 보낸 것이 맞을 때만 「확인」을 누르세요.`)) return;
+  if(!dup.identical.length && dup.same.length && !confirm(`같은 날 ${cur.name} 명세서가 이미 ${dup.same.length}건 있습니다 (합계 ${won(dup.same.reduce((a,s)=>a+s.total,0))}원).\n\n추가 발주가 맞으면 「확인」을 누르세요.`)) return;
+  const savingCustomer=cur;
+  const inputSnapshot=JSON.stringify([lines,...['s-cust','s-date','s-memo','s-kakao'].map(id=>$(id).value)]);
   const d=$('s-date').value||today(); $('s-save').disabled=true;
   let slip;
-  try{ slip = await must(sb.from('slips').insert({date:d, code:cur.code, memo:$('s-memo').value,
-                lines:ls.map(l=>({...l,amt:Math.round(l.qty*l.price)})), total:ls.reduce((a,l)=>a+Math.round(l.qty*l.price),0)}).select().single()); }
-  finally{ $('s-save').disabled=false; }
+  try{ slip = await must(sb.from('slips').insert({date:d, code:savingCustomer.code, memo:$('s-memo').value,
+                lines:ls.map(l=>({...l,amt:Math.round(l.qty*l.price)})), total:ls.reduce((a,l)=>a+Math.round(l.qty*l.price),0)}).select().single());
   slip.total = Number(slip.total); db.slips.push(slip);
-  ls.forEach(l=>{ const it=cur.items.find(x=>x.name===l.name&&x.spec===l.spec); if(it){ it.price=l.price; it.last=d; it.n=(it.n||0)+1; } else cur.items.push({name:l.name,spec:l.spec,unit:l.unit,price:l.price,last:d,n:1}); });
-  sb.from('customers').update({items:cur.items, updated_at:new Date().toISOString()}).eq('code',cur.code).then(r=>r.error&&console.warn(r.error));
-  printSlip(slip); lines=[]; $('s-memo').value=''; $('s-kakao').value=''; $('s-readmsg').textContent=''; setCust(); drawLines();
+  if(outOrder){ const o=outOrder; outOrder=null;   // 발주에서 불러온 출고면 발주를 「출고」로 바꾸고 명세서 번호를 연결
+    try{ const done=await must(sb.from('orders').update({status:'출고',slip_id:slip.id}).eq('id',o.id).eq('status','접수').is('canceled',null).select());
+      if(!done.length) throw new Error('이미 출고·취소된 발주');
+      Object.assign(db.orders.find(x=>x.id===o.id)||{}, done[0]); }
+    catch(error){ alert(`명세서 ${slip.id}는 저장됐지만 발주 ${o.id}를 「출고」로 바꾸지 못했습니다(${error.message}). 명세서를 다시 저장하지 말고 발주 목록에서 확인하세요.`); } }
+  const customerEdit=customerDrafts.get(savingCustomer.code);
+  if(customerEdit?.pending||customerEdit?.conflict||customerWriteLocks.has(savingCustomer.code)){
+    alert('명세서는 저장됐습니다. 거래처 편집이 처리 중이거나 확인이 필요해 품목 단가 자동 갱신은 보류했습니다. 명세서를 다시 저장하지 마세요.');
+  }else{
+  customerWriteLocks.add(savingCustomer.code);
+  const itemsBefore=JSON.stringify(savingCustomer.items);
+  try{
+  const nextItems=savingCustomer.items.map(it=>({...it}));
+  ls.forEach(l=>{ const it=nextItems.find(x=>x.name===l.name&&x.spec===l.spec); if(it){ it.price=l.price; it.last=d; it.n=(it.n||0)+1; } else nextItems.push({name:l.name,spec:l.spec,unit:l.unit,price:l.price,last:d,n:1}); });
+  try{ const result=await sb.from('customers').update({items:nextItems, updated_at:new Date().toISOString()}).eq('code',savingCustomer.code);
+    if(result.error) throw result.error;
+    if(JSON.stringify(savingCustomer.items)!==itemsBefore){
+      const conflictEdit=customerDrafts.get(savingCustomer.code)||makeCustomerDraft(savingCustomer);
+      conflictEdit.conflict=true; conflictEdit.conflictRef=savingCustomer; customerDrafts.set(savingCustomer.code,conflictEdit);
+      alert('명세서는 저장됐지만 단가 갱신 응답 중 다른 변경이 확인됐습니다. 다시 저장하지 말고 장부를 새로 조회해 확인하세요.');
+    }else savingCustomer.items=nextItems;
+  } catch(error){ alert('명세서는 저장됐지만 거래처 단가 갱신은 실패했습니다. 명세서를 다시 저장하지 마세요.'); }
+  }finally{ customerWriteLocks.delete(savingCustomer.code); }
+  }
+  try{ printSlip(slip); }catch(error){ alert('명세서는 저장됐지만 인쇄 화면을 열지 못했습니다. 다시 저장하지 말고 저장된 명세서에서 인쇄하세요.'); }
+  if(cur===savingCustomer && inputSnapshot===JSON.stringify([lines,...['s-cust','s-date','s-memo','s-kakao'].map(id=>$(id).value)])){
+    lines=[]; shipManual=false; $('s-memo').value=''; $('s-kakao').value=''; $('s-readmsg').textContent=''; showOutOrder();
+  } else alert('앞서 요청한 명세서는 저장됐습니다. 대기 중 바꾼 입력은 유지했습니다. 다음 저장 전 내용을 확인하세요.');
+  } finally{ $('s-save').disabled=false; }
+  setCust(); drawLines();
+};
+
+/* ── 발주: 매출에 넣지 않고 따로 보관 → 「출고하기」로 명세서를 만들면 그때 매출이 된다 ── */
+let outOrder=null;   // 지금 명세서 화면에 불러와 출고 처리 중인 발주
+const orderTotal = o => (o.lines||[]).reduce((a,l)=>a+(Number(l.amt)||Math.round(Number(l.qty)*Number(l.price))||0),0);
+const orderState = o => o.canceled ? '취소' : o.status;
+function showOutOrder(){
+  $('s-out').innerHTML = outOrder ? `발주 ${outOrder.id} (출고 예정 ${outOrder.ship_date||'-'}) 출고 처리 중 — 수량을 실제 출고량으로 고친 뒤 「저장하고 출력」을 누르세요. <button class="btn" id="s-out-x" style="padding:2px 8px">발주 연결 끊기</button>` : '';
+  if(outOrder) $('s-out-x').onclick=()=>{ outOrder=null; showOutOrder(); };
+}
+$('s-order').onclick = async ()=>{
+  if($('s-order').disabled) return;
+  if(outOrder) return alert('발주를 출고 처리 중입니다. 「저장하고 출력」으로 출고하거나 「새로 쓰기」 뒤 다시 하세요.');
+  const ls=checkedLines(); if(!ls) return;
+  const ship=$('s-date').value||today();
+  const same=sameDaySlips(db.orders.filter(o=>o.status==='접수').map(o=>({...o,date:o.ship_date})), cur.code, ship, ls);
+  if(same.identical.length && !confirm(`${ship} 출고 예정으로 ${cur.name}에 똑같은 발주가 이미 있습니다 (번호 ${same.identical.map(o=>o.id).join(', ')}).\n\n중복일 가능성이 큽니다. 정말 따로 받은 발주일 때만 「확인」을 누르세요.`)) return;
+  const kakao=$('s-kakao').value.trim(), savingCustomer=cur;
+  const inputSnapshot=JSON.stringify([lines,...['s-cust','s-date','s-memo','s-kakao'].map(id=>$(id).value)]);
+  $('s-order').disabled=true; let row;
+  try{ row = await must(sb.from('orders').insert({date:today(), ship_date:ship, code:savingCustomer.code, memo:$('s-memo').value||null,
+      lines:ls.map(l=>({...l,amt:Math.round(l.qty*l.price)})), source:kakao?'카톡·문자':'직접', raw_text:kakao||null}).select().single()); }
+  finally{ $('s-order').disabled=false; }
+  db.orders.push(row);
+  if(inputSnapshot===JSON.stringify([lines,...['s-cust','s-date','s-memo','s-kakao'].map(id=>$(id).value)])){
+    lines=[]; shipManual=false; $('s-memo').value=''; $('s-kakao').value=''; drawLines();
+    $('s-readmsg').innerHTML=`<b>발주 ${row.id} 저장 (${savingCustomer.name}, 출고 예정 ${ship}, ${won(orderTotal(row))}원).</b> 매출에는 아직 안 들어갔습니다 — 발주 목록에서 「출고하기」를 누르세요.`;
+  } else alert(`발주 ${row.id}는 저장됐습니다. 대기 중 바꾼 입력은 유지했습니다. 다음 저장 전 내용을 확인하세요.`);
+};
+['o-from','o-to','o-cust','o-status'].forEach(id=>$(id).addEventListener('input',renderOrders));
+function orderRows(){
+  const f=$('o-from').value, t=$('o-to').value, c=findCust($('o-cust').value), st=$('o-status').value;
+  return db.orders.filter(o=>(!f||(o.ship_date||o.date)>=f)&&(!t||(o.ship_date||o.date)<=t)&&(!c||o.code===c.code)&&(!st||orderState(o)===st))
+    .sort((a,b)=>(a.ship_date||a.date).localeCompare(b.ship_date||b.date)||a.id.localeCompare(b.id));
+}
+function renderOrders(){
+  const rows=orderRows();
+  $('o-table').tBodies[0].innerHTML = rows.map(o=>{ const s=orderState(o);
+    return `<tr class="${o.canceled?'cancel':''}"><td>${o.ship_date||''}</td><td>${o.id}</td><td>${cust(o.code)?.name||o.code}</td>
+    <td style="white-space:normal">${(o.lines||[]).map(l=>l.name+' '+l.qty).join(', ').slice(0,80)}</td><td class="n">${won(orderTotal(o))}</td>
+    <td>${s==='출고'?`출고 · 명세서 ${o.slip_id||''}`:s}</td>
+    <td>${s==='접수'?`<button class="btn pri" data-out="${o.id}">출고하기</button> <button class="btn warn" data-oc="${o.id}">취소</button>`:''}</td></tr>`; }).join('')
+    || '<tr><td colspan="7" class="mut">조건에 맞는 발주가 없습니다.</td></tr>';
+  $('o-total').textContent=won(rows.filter(o=>!o.canceled).reduce((a,o)=>a+orderTotal(o),0)); $('o-cnt').textContent=`(${rows.length}건)`;
+}
+$('o-table').onclick = async e=>{
+  const out=e.target.dataset.out, oc=e.target.dataset.oc;
+  if(out){ const o=db.orders.find(x=>x.id===out); if(!o || orderState(o)!=='접수') return alert('출고 전 발주만 출고할 수 있습니다.');
+    const c=cust(o.code); if(!c) return alert('이 발주의 거래처를 찾지 못했습니다.');
+    if((lines.length || outOrder) && !confirm('명세서 화면에 작성 중인 내용이 있습니다. 지우고 이 발주를 불러올까요?')) return;
+    const rule=shipRuleFor(c);
+    // 택배비 기준이 있는 거래처는 실제 출고량으로 다시 계산되도록 발주의 택배비 줄을 빼고 불러온다
+    lines=(o.lines||[]).filter(l=>!(rule && /택배/.test(String(l.name??'')))).map(({amt,...l})=>({...l}));
+    $('s-cust').value=c.code+' '+c.name; setCust();
+    outOrder=o; shipManual=false; $('s-date').value=today(); $('s-memo').value=o.memo||''; $('s-kakao').value=''; $('s-readmsg').textContent='';
+    drawLines(); showOutOrder(); document.querySelector('#nav button[data-v="slip"]').click(); return; }
+  if(oc && confirm('이 발주를 취소할까요? (지우지 않고 「취소」로 남깁니다)')){
+    const o=db.orders.find(x=>x.id===oc); const t=new Date().toISOString();
+    const done=await must(sb.from('orders').update({canceled:t}).eq('id',oc).eq('status','접수').is('canceled',null).select());
+    if(!done.length) alert('이미 출고됐거나 취소된 발주입니다. 새로고침 후 확인하세요.'); else Object.assign(o, done[0]);
+    if(outOrder?.id===oc){ outOrder=null; showOutOrder(); }
+    renderOrders(); }
 };
 
 /* ── 인쇄 ── */
@@ -331,10 +667,12 @@ function slipHTML(s, copy){
 function printSlip(s){ $('print').innerHTML = slipHTML(s,'공급받는자용') + slipHTML(s,'공급자 보관용'); setTimeout(()=>window.print(),50); }
 
 /* ── 잔액 계산 ── */
+// 전환 기준일(settings 「opening_date」)이 있으면 기초잔액은 그날 시작 잔액이고, 그 전 명세서·입금은 잔액에 넣지 않는다.
+const afterOpening = d => !db.openingDate || d >= db.openingDate;
 function balance(code, until, beforeId){
   const c = cust(code); let b = c?.opening||0;
-  db.slips.forEach(s=>{ if(s.code===code && !s.canceled && (!until || s.date<until || (s.date===until && s.id<beforeId))) b+=s.total; });
-  db.pays.forEach(p=>{ if(p.code===code && !p.canceled && (!until || p.date<until)) b-=p.amt; });
+  db.slips.forEach(s=>{ if(s.code===code && !s.canceled && afterOpening(s.date) && (!until || s.date<until || (s.date===until && s.id<beforeId))) b+=s.total; });
+  db.pays.forEach(p=>{ if(p.code===code && !p.canceled && afterOpening(p.date) && (!until || p.date<until)) b-=p.amt; });
   return b;
 }
 
@@ -363,9 +701,9 @@ $('mc-down').onclick = ()=>{
   const last=new Date(+m.slice(0,4), +m.slice(5,7), 0); const ld=m+'-'+String(last.getDate()).padStart(2,'0');
   const rows=Object.entries(by).map(([code,list])=>{ const c=cust(code); const sum=list.reduce((a,x)=>a+x.total,0);
     const agg={}; list.forEach(x=>x.lines.forEach(l=>{ agg[l.name]=(agg[l.name]||0)+Number(l.qty); }));
-    return {c,code,sum,n:list.length,items:Object.entries(agg).map(([k,v])=>k+' '+v).join(', '),ok:!!(c&&c.bizno)}; })
+    return {c,code,sum,n:list.length,items:Object.entries(agg).map(([k,v])=>k+' '+v).join(', '),ok:bizNoValid(c?.bizno)===true}; })
     .sort((a,b)=>(b.ok-a.ok)||b.sum-a.sum);
-  const lines=[head.map(q).join(',')].concat(rows.map(r=>[ld,r.code,r.c?.bizno,r.c?.legal,r.c?.ceo,r.c?.addr,r.c?.type,r.c?.item,r.n,r.sum,r.items,r.ok?'':'사업자번호 없음 — 발행 전 확인'].map(q).join(',')));
+  const lines=[head.map(q).join(',')].concat(rows.map(r=>[ld,r.code,r.c?.bizno,r.c?.legal,r.c?.ceo,r.c?.addr,r.c?.type,r.c?.item,r.n,r.sum,r.items,r.ok?'':(r.c?.bizno?'사업자번호 오류':'사업자번호 없음')+' — 발행 전 확인'].map(q).join(',')));
   const total=rows.reduce((a,r)=>a+r.sum,0); lines.push(['','','','합계','','','','',live.length,total,'',''].map(q).join(','));
   const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob(['\ufeff'+lines.join('\r\n')],{type:'text/csv'})); a.download='월마감_'+m+'.csv'; a.click();
 };
@@ -374,13 +712,14 @@ $('mc-down').onclick = ()=>{
 ['lg-cust','lg-from','lg-to'].forEach(id=>$(id).addEventListener('input',renderLedger));
 function renderLedger(){
   const c=findCust($('lg-cust').value); if(!c){ $('lg-body').innerHTML='<p class="mut">거래처를 고르세요.</p>'; return; }
-  const f=$('lg-from').value||'0000', t=$('lg-to').value||'9999';
+  let f=$('lg-from').value||'0000'; const t=$('lg-to').value||'9999';
+  if(db.openingDate && f<db.openingDate) f=db.openingDate;   // 전환 기준일 전 거래는 기초잔액에 이미 들어 있다
   let bal = balance(c.code, f, '');
   const ev = [...db.slips.filter(s=>s.code===c.code&&!s.canceled&&s.date>=f&&s.date<=t).map(s=>({d:s.date,k:s.id,t:'매출',m:s.lines.map(l=>l.name+' '+l.qty).join(', '),plus:s.total,minus:0})),
               ...db.pays.filter(p=>p.code===c.code&&!p.canceled&&p.date>=f&&p.date<=t).map(p=>({d:p.date,k:'~'+p.id,t:'입금',m:p.way+(p.memo?' · '+p.memo:''),plus:0,minus:p.amt}))]
               .sort((a,b)=>a.d<b.d?-1:a.d>b.d?1:(a.k<b.k?-1:a.k>b.k?1:0));   // 같은 날은 매출 먼저, 입금 나중
   let html = `<h2>${c.legal} <span class="mut">${c.code} · ${c.bizno||''}</span></h2><div class="wrap"><table><thead><tr><th>날짜</th><th>구분</th><th>내용</th><th class="n">매출</th><th class="n">입금</th><th class="n">잔액</th></tr></thead><tbody>
-    <tr><td>${f==='0000'?'':f}</td><td>이월</td><td class="mut">${f==='0000'?'기초잔액':'전기 이월'}</td><td></td><td></td><td class="n">${won(bal)}</td></tr>`;
+    <tr><td>${f==='0000'?'':f}</td><td>이월</td><td class="mut">${f==='0000'?'기초잔액':f===db.openingDate?'기초잔액(전환 기준일)':'전기 이월'}</td><td></td><td></td><td class="n">${won(bal)}</td></tr>`;
   let sp=0, sm=0; ev.forEach(e=>{ bal+=e.plus-e.minus; sp+=e.plus; sm+=e.minus; html+=`<tr><td>${e.d}</td><td>${e.t}</td><td>${e.m.slice(0,50)}</td><td class="n">${e.plus?won(e.plus):''}</td><td class="n">${e.minus?won(e.minus):''}</td><td class="n">${won(bal)}</td></tr>`; });
   html += `<tr><th colspan="3">합계</th><th class="n">${won(sp)}</th><th class="n">${won(sm)}</th><th class="n">${won(bal)}</th></tr></tbody></table></div>`;
   $('lg-body').innerHTML = html;
@@ -389,48 +728,486 @@ $('lg-print').onclick = ()=>{ renderLedger(); $('print').innerHTML = '<div style
 
 /* ── 입금 ── */
 $('p-cust').addEventListener('input', ()=>{ const c=findCust($('p-cust').value); $('p-bal').textContent = c ? `${c.legal} 현재 잔액 ${won(balance(c.code))}원` : ''; });
-$('p-save').onclick = async ()=>{ const c=findCust($('p-cust').value), amt=parseInt(($('p-amt').value||'').replace(/[^\d-]/g,''));
-  if(!c) return alert('거래처를 고르세요.'); if(!amt) return alert('금액을 넣으세요.');
-  const row = await must(sb.from('pays').insert({date:$('p-date').value||today(),code:c.code,amt,way:$('p-way').value,memo:$('p-memo').value}).select().single());
-  row.amt=Number(row.amt); db.pays.push(row); $('p-amt').value=''; $('p-memo').value=''; $('p-cust').dispatchEvent(new Event('input')); renderPays(); };
+// Integer KRW input only. Preserve the existing signed-payment policy.
+function parsePaymentWon(value){
+  if(typeof value!=='string') return null;
+  const text=value.trim();
+  if(!/^-?(?:[0-9]+|[1-9][0-9]{0,2}(?:,[0-9]{3})+)$/.test(text)) return null;
+  const amount=Number(text.replace(/,/g,''));
+  return Number.isSafeInteger(amount) ? amount : null;
+}
+// Decimal unit prices retain their existing fractional/signed semantics.
+function parseUnitPriceWon(value){
+  if(typeof value!=='string') return null;
+  const text=value.trim();
+  if(text==='') return 0;
+  if(!/^-?(?:(?:[0-9]+|[1-9][0-9]{0,2}(?:,[0-9]{3})+)(?:\.[0-9]*)?|\.[0-9]+)$/.test(text)) return null;
+  const amount=Number(text.replace(/,/g,''));
+  return Number.isFinite(amount) && Math.abs(amount)<=Number.MAX_SAFE_INTEGER ? amount : null;
+}
+/* ── 입력 안전장치: 사업자번호 검사·0원 줄·중복 저장 ── */
+// 국세청 사업자등록번호 검증식. 빈칸은 null(검사 안 함), 형식·검증 숫자가 틀리면 false.
+function bizNoValid(value){
+  const text=String(value??'').trim(); if(text==='') return null;
+  if(!/^\d{3}-?\d{2}-?\d{5}$/.test(text)) return false;
+  const d=text.replace(/-/g,'').split('').map(Number), w=[1,3,7,1,3,7,1,3,5];
+  const sum=w.reduce((a,x,i)=>a+x*d[i],0)+Math.floor(d[8]*5/10);
+  return (10-sum%10)%10===d[9];
+}
+function zeroPriceLines(ls){ return ls.filter(l=>Number(l.price)===0).map(l=>l.name||'(품명 없음)'); }
+const slipLinesKey = ls => JSON.stringify(ls.map(l=>[String(l.name).trim(),String(l.spec??'').trim(),Number(l.qty),Number(l.price)]).sort());
+// 같은 거래처·같은 날 취소 안 된 명세서. identical은 품목·수량·단가까지 같은 것.
+function sameDaySlips(slips, code, date, ls){
+  const same=slips.filter(s=>s.code===code && s.date===date && !s.canceled), key=slipLinesKey(ls);
+  return {same, identical:same.filter(s=>slipLinesKey(s.lines||[])===key)};
+}
+function sameDayPays(pays, code, date, amt){ return pays.filter(p=>p.code===code && p.date===date && !p.canceled && Number(p.amt)===amt); }
+function parseOpeningWon(value){
+  return typeof value==='string' && value.trim()==='' ? 0 : parsePaymentWon(value);
+}
+function parseCatalogPriceWon(value){
+  const amount=parseOpeningWon(value);
+  return amount!==null && amount>=0 ? amount : null;
+}
+$('p-save').onclick = async ()=>{ if($('p-save').disabled) return; const c=findCust($('p-cust').value), amt=parsePaymentWon($('p-amt').value);
+  if(!c) return alert('거래처를 고르세요.'); if(amt===null) return alert('금액은 원 단위 정수로 입력하세요. 쉼표는 천 단위로만 사용할 수 있습니다.'); if(amt===0) return alert('금액을 넣으세요.');
+  if(sameDayPays(db.pays, c.code, $('p-date').value||today(), amt).length && !confirm(`같은 날 ${c.name}에서 같은 금액 ${won(amt)}원 입금이 이미 등록돼 있습니다.\n\n중복 등록일 가능성이 큽니다. 실제로 두 번 들어온 것이 맞을 때만 「확인」을 누르세요.`)) return;
+  const inputSnapshot=['p-cust','p-date','p-amt','p-way','p-memo'].map(id=>[id,$(id).value]);
+  $('p-save').disabled=true; let row;
+  try{ row = await must(sb.from('pays').insert({date:$('p-date').value||today(),code:c.code,amt,way:$('p-way').value,memo:$('p-memo').value}).select().single()); }finally{ $('p-save').disabled=false; }
+  row.amt=Number(row.amt); db.pays.push(row);
+  if(inputSnapshot.every(([id,value])=>$(id).value===value)){ $('p-amt').value=''; $('p-memo').value=''; }
+  else alert('앞서 요청한 입금은 저장됐습니다. 대기 중 바꾼 입력은 지우지 않고 유지했습니다. 다음 저장 전 내용을 확인하세요.');
+  $('p-cust').dispatchEvent(new Event('input')); renderPays(); };
 function renderPays(){
   $('p-table').tBodies[0].innerHTML = db.pays.slice().reverse().slice(0,100).map(p=>`<tr class="${p.canceled?'cancel':''}"><td>${p.date}</td><td>${cust(p.code)?.name}</td><td class="n">${won(p.amt)}</td><td>${p.way}</td><td>${p.memo||''}</td>
     <td>${p.canceled?'':`<button class="btn warn" data-c="${p.id}">취소</button>`}</td></tr>`).join('') || '<tr><td colspan="6" class="mut">입금 기록이 없습니다.</td></tr>';
+}
+/* ── 은행 입금 문자 읽기: 읽어서 표로 보여 주고, 사람이 확인한 줄만 저장한다 ── */
+const BANK_WORDS = /^(?:농협|NH|NH농협|국민|KB|KB국민|신한|우리|하나|기업|IBK|부산|BNK|경남|대구|DGB|카카오|카카오뱅크|케이뱅크|토스|토스뱅크|새마을|우체국|SC|SC제일|수협|씨티|광주|전북|제주|은행|입금알림|입출금)$/;
+// 문자 덩어리를 한 건씩 나눈다: [Web발신] 기준, 빈 줄 기준, 그래도 한 덩어리에 여러 건이면 줄 기준.
+function splitBankSms(text){
+  const out=[];
+  String(text??'').split(/\[Web발신\]/).forEach(chunk=>chunk.split(/\r?\n\s*\r?\n/).forEach(p=>{
+    if(!p.trim()) return;
+    const many=(p.match(/입금/g)||[]).length>1 && (p.match(/\d{1,2}\/\d{1,2}\s+\d{1,2}:\d{2}/g)||[]).length>1;
+    (many ? p.split(/\r?\n/) : [p]).forEach(x=>{ if(x.trim()) out.push(x.trim()); });
+  }));
+  return out;
+}
+// 한 건을 읽는다. 못 읽으면 {error}. base = 오늘(YYYY-MM-DD), 연도 추정에 쓴다.
+function parseBankSms(piece, base){
+  const flat=piece.replace(/\s+/g,' ').trim();
+  if(/입금취소|출금/.test(flat) && !/입금\s*[\d,]+/.test(flat.replace(/입금취소/g,''))) return {error:'입금 문자가 아님(출금·취소)'};
+  const dt=flat.match(/(\d{1,2})\/(\d{1,2})\s+(\d{1,2}:\d{2})/); if(!dt) return {error:'날짜·시각을 못 찾음'};
+  let s=flat.replace(/\[[^\]]*\]/g,' ').replace(dt[0],' ').replace(/잔액\s*[\d,]+\s*원?/g,' ').replace(/\s+/g,' ').trim();
+  const am=s.match(/입금\s*([\d,]+)\s*원?/); if(!am) return {error:'입금 금액을 못 찾음'};
+  if(!/^(?:\d+|\d{1,3}(?:,\d{3})+)$/.test(am[1])) return {error:'금액 표기가 이상함 '+am[1]};
+  const amt=Number(am[1].replace(/,/g,'')); if(!Number.isSafeInteger(amt) || amt<=0) return {error:'금액이 0이거나 너무 큼'};
+  const keep=t=>t && !BANK_WORDS.test(t) && !/\*/.test(t) && !/^[\d-]{4,}$/.test(t) && !/^원$/.test(t);
+  let who=s.slice(0, am.index).split(' ').filter(keep).join(' ');
+  if(!who) who=s.slice(am.index+am[0].length).split(' ').filter(keep).join(' ');
+  if(!who) return {error:'입금자 이름을 못 찾음'};
+  const by=+base.slice(0,4), bm=+base.slice(5,7), mo=+dt[1], dd=+dt[2];
+  if(mo<1||mo>12||dd<1||dd>31) return {error:'날짜가 이상함'};
+  const y = mo>bm+1 ? by-1 : by;   // 1월에 받은 12월 문자는 작년
+  return {date:`${y}-${String(mo).padStart(2,'0')}-${String(dd).padStart(2,'0')}`, time:dt[3], who, amt};
+}
+const stripCo = s => String(s??'').replace(/\s|\(주\)|㈜|주식회사/g,'');
+// 입금자명 → 거래처. 기억해 둔 입금자명(pay_alias)이 먼저, 그다음 이름 비교(은행이 잘라 보낸 이름도 앞부분이 맞으면 찾음).
+function custForDepositor(who){
+  const w=stripCo(who); if(w.length<2) return {c:null, cands:[]};
+  const memo=(db.payAlias||{})[w]; if(memo && cust(memo)) return {c:cust(memo), cands:[cust(memo)], by:'기억'};
+  // 얼마나 길게 맞았는지로 겨룬다: 「○○식당본점」은 본점(6자 일치)이 정식상호가 「○○식당」인 다른 지점(4자)을 이긴다
+  const score=c=>Math.max(0,...[c.name,c.legal,...Object.keys(CUST_ALIAS).filter(k=>CUST_ALIAS[k]===c.code)].map(k=>{ k=stripCo(k);
+    return k.length<2 ? 0 : k.startsWith(w) ? w.length : w.includes(k) ? k.length : 0; }));
+  const scored=db.customers.map(c=>[c,score(c)]).filter(x=>x[1]>0), top=Math.max(0,...scored.map(x=>x[1]));
+  const cands=scored.filter(x=>x[1]===top).map(x=>x[0]);
+  return {c:cands.length===1?cands[0]:null, cands, by:cands.length===1?'이름':''};
+}
+let pmRows=[];
+$('pm-read').onclick=()=>{
+  const pieces=splitBankSms($('pm-text').value); if(!pieces.length) return;
+  const errs=[]; pmRows=[];
+  pieces.forEach(p=>{ const r=parseBankSms(p, $('p-date').value||today()); if(r.error){ errs.push(`${r.error}: ${p.slice(0,40)}`); return; }
+    const f=custForDepositor(r.who); pmRows.push({...r, code:f.c?.code||'', cands:f.cands, by:f.by, manual:false, on:!!f.c}); });
+  renderPm(); $('pm-msg').innerHTML=`${pmRows.length}건 읽음`+(errs.length?` <b style="color:var(--wine)">못 읽은 것 ${errs.length}건: ${errs.map(customerEscape).join(' / ')}</b>`:'');
+};
+function renderPm(){
+  if(!pmRows.length){ $('pm-body').innerHTML=''; return; }
+  const run={};   // 같은 거래처 여러 건이면 앞 건을 뺀 잔액으로 이어서 계산
+  const rows=pmRows.map((r,i)=>{ const c=cust(r.code);
+    const dup=c && sameDayPays(db.pays, c.code, r.date, r.amt).length>0;
+    if(dup && r.on && !r.dupSeen){ r.on=false; } r.dupSeen=true;
+    let state='', before='', after='';
+    if(c){ before=run[c.code]??balance(c.code); after=before-r.amt; if(r.on) run[c.code]=after;
+      state=Math.abs(after)<1?'완납':after<0?`과입금 ${won(-after)}원`:`잔여 ${won(after)}원`; }
+    const why=!c?(r.cands.length>1?`후보 ${r.cands.length}곳: ${r.cands.map(x=>x.name).join(', ')} — 골라 주세요`:'거래처를 못 찾음 — 골라 주세요'):(r.by==='기억'?'전에 고른 입금자':'');
+    return `<tr><td><input type="checkbox" data-pon="${i}" ${r.on?'checked':''} ${c?'':'disabled'}></td><td>${r.date} ${r.time}</td><td>${customerEscape(r.who)}</td><td class="n">${won(r.amt)}</td>
+      <td><input data-pc="${i}" list="custlist" value="${c?customerEscape(c.code+' '+c.name):''}" placeholder="거래처 고르기" style="min-width:180px"></td>
+      <td class="n">${c?won(before)+' → '+won(after):''}</td><td>${state}</td>
+      <td style="white-space:normal;color:var(--wine)">${dup?'<b>같은 날 같은 금액 입금이 이미 있음 — 중복이면 체크하지 마세요</b> ':''}${why}</td></tr>`; }).join('');
+  $('pm-body').innerHTML=`<div class="wrap"><table><thead><tr><th>저장</th><th>입금 시각</th><th>입금자</th><th class="n">금액</th><th>거래처</th><th class="n">미수 전 → 후</th><th>상태</th><th>확인</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <div class="row" style="margin-top:8px"><div style="flex:0"><button class="btn pri" id="pm-save">체크한 입금 저장</button></div><div><span class="mut">저장하면 입금 관리·원장·미수금에 바로 들어갑니다. 직접 고른 거래처는 입금자 이름과 함께 기억해 다음부터 자동으로 찾습니다.</span></div></div>`;
+  $('pm-save').onclick=savePm;
+}
+$('pm-body').addEventListener('change', e=>{
+  const pc=e.target.dataset.pc, po=e.target.dataset.pon;
+  if(pc!==undefined){ const c=findCust(e.target.value), r=pmRows[pc]; r.code=c?.code||''; r.manual=!!c; r.on=!!c; r.by=''; r.dupSeen=false; renderPm(); }
+  if(po!==undefined){ pmRows[po].on=e.target.checked; renderPm(); }
+});
+async function savePm(){
+  if($('pm-save').disabled) return;
+  const pick=pmRows.filter(r=>r.on && cust(r.code)); if(!pick.length) return alert('저장할 입금을 체크하세요.');
+  if(!confirm(`입금 ${pick.length}건, 합계 ${won(pick.reduce((a,r)=>a+r.amt,0))}원을 저장할까요?`)) return;
+  $('pm-save').disabled=true; let saved;
+  try{ saved=await must(sb.from('pays').insert(pick.map(r=>({date:r.date, code:r.code, amt:r.amt, way:'계좌이체', memo:`${r.who} ${r.time} 은행문자`}))).select()); }
+  finally{ if($('pm-save')) $('pm-save').disabled=false; }
+  saved.forEach(p=>db.pays.push({...p, amt:Number(p.amt)}));
+  const learn=pick.filter(r=>r.manual);
+  if(learn.length){ try{
+      const fresh=await must(sb.from('settings').select('value').eq('key','pay_alias').maybeSingle());
+      const all={...(fresh?.value||{})}; learn.forEach(r=>{ all[stripCo(r.who)]=r.code; });
+      await must(sb.from('settings').upsert({key:'pay_alias',value:all,updated_at:new Date().toISOString()})); db.payAlias=all;
+    }catch(error){ alert('입금은 저장됐지만 입금자 이름 기억은 실패했습니다. 다음에 다시 골라 주세요.'); } }
+  pmRows=pmRows.filter(r=>!pick.includes(r)); renderPm(); renderPays();
+  $('pm-msg').innerHTML=`<b>입금 ${saved.length}건 저장했습니다.</b>`+(pmRows.length?` 남은 ${pmRows.length}건은 아직 저장하지 않았습니다.`:'');
+  if(!pmRows.length) $('pm-text').value='';
 }
 $('p-table').onclick = async e=>{ const c=e.target.dataset.c; if(c && confirm('이 입금을 취소할까요?')){ const t=new Date().toISOString(); await must(sb.from('pays').update({canceled:t}).eq('id',c)); db.pays.find(p=>p.id===c).canceled=t; renderPays(); } };
 
 /* ── 미수금 ── */
 function renderAR(){
-  let sum=0; const rows = db.customers.map(c=>{ const sales=db.slips.filter(s=>s.code===c.code&&!s.canceled), pays=db.pays.filter(p=>p.code===c.code&&!p.canceled);
+  let sum=0; const rows = db.customers.map(c=>{ const sales=db.slips.filter(s=>s.code===c.code&&!s.canceled&&afterOpening(s.date)), pays=db.pays.filter(p=>p.code===c.code&&!p.canceled&&afterOpening(p.date));
     const b=balance(c.code); sum+=b; return {c,sales:sales.reduce((a,s)=>a+s.total,0),pay:pays.reduce((a,p)=>a+p.amt,0),b,ls:sales.map(s=>s.date).sort().pop()||'',lp:pays.map(p=>p.date).sort().pop()||''}; })
     .filter(r=>r.b||r.sales||r.pay||r.c.opening).sort((a,b)=>b.b-a.b);
   $('ar-table').tBodies[0].innerHTML = rows.map(r=>`<tr><td>${r.c.name}</td><td class="n">${won(r.c.opening)}</td><td class="n">${won(r.sales)}</td><td class="n">${won(r.pay)}</td><td class="n"><b>${won(r.b)}</b></td><td>${r.ls}</td><td>${r.lp}</td></tr>`).join('') || '<tr><td colspan="7" class="mut">아직 기록이 없습니다. 거래처·단가 화면에서 기초잔액(현재 미수금)을 먼저 넣으세요.</td></tr>';
   $('ar-total').textContent = won(sum);
+  $('ar-od').textContent = db.openingDate ? `(전환 기준일 ${db.openingDate}부터 계산)` : '(전환 기준일 미설정 — 모든 명세서·입금으로 계산)';
+  $('ob-date').value ||= db.openingDate || '';
+}
+/* ── 기초잔액 일괄 입력 ── */
+// 한 줄 = 거래처 + 금액. 금액은 줄 맨 끝 숫자(음수 = 선입금). 거래처는 코드 → 정확한 이름 → 글 속 이름 순서로 찾고, 애매하면 고르지 않는다.
+function parseOpeningLines(text){
+  return String(text??'').split(/\r?\n/).map(x=>x.replace(/\t/g,' ').trim()).filter(Boolean).map(line=>{
+    const m=line.match(/^(.*?)\s*(-?(?:\d{1,3}(?:,\d{3})+|\d+))\s*원?$/); if(!m || !m[1].trim()) return {line, error:'거래처와 금액을 못 나눔'};
+    const amt=parseOpeningWon(m[2]); if(amt===null) return {line, error:'금액 표기가 이상함'};
+    const name=m[1].trim(), code=name.match(/^\[?(\d{5})\]?/);
+    let c=code?cust(code[1]):findCust(name), why='';
+    if(!c){ const f=custFromText(name); c=f.c; if(f.ambiguous) why=`${f.ambiguous.map(x=>x.name).join(', ')} 중 어디인지 모름`; if(f.multiple) why='거래처가 둘 이상'; }
+    return {line, name, amt, c, error:c?'':(why||'거래처를 못 찾음')};
+  });
+}
+let obRows=[];
+$('ob-read').onclick=()=>{
+  obRows=parseOpeningLines($('ob-text').value);
+  const seen={}; obRows.forEach(r=>{ if(r.c){ if(seen[r.c.code]) r.error=`같은 거래처가 두 번 나옴(${seen[r.c.code]}번째 줄과)`; else seen[r.c.code]=obRows.indexOf(r)+1; } });
+  const ok=obRows.filter(r=>!r.error), bad=obRows.filter(r=>r.error);
+  $('ob-body').innerHTML = obRows.length ? `<div class="wrap"><table><thead><tr><th>붙여넣은 줄</th><th>거래처</th><th class="n">지금 기초잔액</th><th class="n">새 기초잔액</th><th class="n">차이</th><th>확인</th></tr></thead><tbody>${obRows.map(r=>`<tr><td>${customerEscape(r.line)}</td><td>${r.c?customerEscape(r.c.name):''}</td><td class="n">${r.c?won(r.c.opening):''}</td><td class="n">${r.error?'':won(r.amt)}</td><td class="n">${r.c&&!r.error?won(r.amt-r.c.opening):''}</td><td style="color:var(--wine)">${customerEscape(r.error)}</td></tr>`).join('')}</tbody></table></div>
+    <p>읽은 ${ok.length}곳, 합계 <b>${won(ok.reduce((a,r)=>a+r.amt,0))}</b>원${bad.length?` · <b style="color:var(--wine)">확인 필요 ${bad.length}줄은 저장하지 않습니다</b>`:''} · 목록에 없는 거래처의 기초잔액은 그대로 둡니다.</p>
+    <button class="btn pri" id="ob-save" ${ok.length?'':'disabled'}>기준일과 기초잔액 저장</button>` : '';
+  if($('ob-save')) $('ob-save').onclick=saveOpening;
+};
+async function saveOpening(){
+  if($('ob-save').disabled) return;
+  const d=$('ob-date').value; if(!d) return alert('전환 기준일을 먼저 고르세요.');
+  const ok=obRows.filter(r=>!r.error);
+  const busy=ok.filter(r=>{ const e=customerDrafts.get(r.c.code); return e?.pending||e?.conflict||customerWriteLocks.has(r.c.code); });
+  if(busy.length) return alert('거래처·단가 화면에서 편집 중인 거래처가 있습니다: '+busy.map(r=>r.c.name).join(', ')+'. 그 편집을 먼저 끝내세요.');
+  if(!confirm(`전환 기준일 ${d}, 거래처 ${ok.length}곳의 기초잔액(합계 ${won(ok.reduce((a,r)=>a+r.amt,0))}원)을 저장할까요?\n\n기준일 전 명세서·입금은 잔액 계산에서 빠집니다.`)) return;
+  $('ob-save').disabled=true; const done=[], failed=[];
+  try{
+    await must(sb.from('settings').upsert({key:'opening_date',value:d,updated_at:new Date().toISOString()})); db.openingDate=d;
+    for(const r of ok){ try{ const res=await sb.from('customers').update({opening:r.amt,updated_at:new Date().toISOString()}).eq('code',r.c.code);
+        if(res.error) throw res.error; r.c.opening=r.amt; done.push(r); customerDrafts.delete(r.c.code); }catch(error){ failed.push(r.c.name); } }
+  } finally{ if($('ob-save')) $('ob-save').disabled=false; }
+  alert(`기초잔액 ${done.length}곳 저장했습니다.`+(failed.length?` 실패 ${failed.length}곳: ${failed.join(', ')} — 다시 시도하세요.`:''));
+  renderAR(); $('ob-read').onclick();
 }
 
-/* ── 거래처·단가 ── */
+/* ── 거래처·단가: 저장값과 편집 초안을 분리 ── */
+const customerDrafts=new Map(), customerWriteLocks=new Set(); let activeCustomerDraft=null, customerRowSequence=0;
+const customerFieldKeys=['legal','bizno','ceo','tel','addr','type','item','opening'];
+const customerItemKeys=['name','spec','unit','price'];
+const customerEscape=value=>String(value??'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+const customerBase=c=>JSON.stringify([c.code,c.name,...customerFieldKeys.map(k=>c[k]??''),c.items]);
+function customerSnapshot(edit){
+  return JSON.stringify([customerFieldKeys.map(k=>String(edit.fields[k]??'')),edit.items.map(it=>[it._rowKey,...customerItemKeys.map(k=>String(it[k]??''))])]);
+}
+function makeCustomerDraft(c){
+  const edit={code:c.code,fields:Object.fromEntries(customerFieldKeys.map(k=>[k,c[k]??''])),items:c.items.map(it=>({...it,_rowKey:++customerRowSequence,_originalPrice:it.price})),base:customerBase(c),pending:false,conflict:false};
+  edit.baseRowKeys=edit.items.map(it=>it._rowKey);
+  edit.clean=customerSnapshot(edit); return edit;
+}
+function captureCustomerDraft(){
+  const edit=activeCustomerDraft; if(!edit) return;
+  $('c-body').querySelectorAll('[data-ck]').forEach(e=>edit.fields[e.dataset.ck]=e.value);
+  $('c-body').querySelectorAll('[data-ii]').forEach(e=>{ const it=edit.items[Number(e.dataset.ii)]; if(it) it[e.dataset.k]=e.value; });
+}
 $('c-cust').addEventListener('input', renderCust);
 function renderCust(){
-  const c=findCust($('c-cust').value); if(!c){ $('c-body').innerHTML='<p class="mut">거래처를 고르면 사업자 정보·기초잔액·품목 단가를 고칠 수 있습니다.</p>'; return; }
-  const f=(k,l)=>`<div><label>${l}</label><input data-ck="${k}" value="${(c[k]??'').toString().replace(/"/g,'&quot;')}"></div>`;
-  $('c-body').innerHTML = `<div class="row">${f('legal','상호(정식)')}${f('bizno','사업자번호')}${f('ceo','대표자')}${f('tel','전화')}</div>
+  captureCustomerDraft();
+  const c=findCust($('c-cust').value); activeCustomerDraft=null;
+  renderShipRule(c);
+  if(!c){ $('c-body').innerHTML='<p class="mut">거래처를 고르면 사업자 정보·기초잔액·품목 단가를 고칠 수 있습니다.</p>'; return; }
+  if(!customerDrafts.has(c.code)) customerDrafts.set(c.code,makeCustomerDraft(c));
+  let edit=customerDrafts.get(c.code);
+  if(!edit.pending&&!edit.conflict&&edit.base!==customerBase(c)&&customerSnapshot(edit)===edit.clean){edit=makeCustomerDraft(c);customerDrafts.set(c.code,edit);}
+  activeCustomerDraft=edit;
+  const f=(k,l)=>`<div><label>${l}</label><input data-ck="${k}" value="${customerEscape(edit.fields[k])}"></div>`;
+  $('c-body').innerHTML=`<div class="row">${f('legal','상호(정식)')}${f('bizno','사업자번호')}${f('ceo','대표자')}${f('tel','전화')}</div>
     <div class="row" style="margin-top:8px">${f('addr','주소')}${f('type','업태')}${f('item','종목')}${f('opening','기초잔액(시작 시점 미수금)')}</div>
+    <p class="mut">편집 내용은 거래처별로 이 화면에 보관됩니다. 저장 전에는 장부에 반영되지 않으며, 브라우저를 닫거나 새로 고치면 사라집니다.</p>
+    ${edit.conflict||edit.base!==customerBase(c)?'<p style="color:var(--wine)">저장값 변경 또는 겹친 요청이 확인됐습니다. 현재 화면은 보관 중인 초안입니다. 최신 저장값 확인이 필요합니다.</p>':''}
     <h2 style="margin-top:14px">품목·단가</h2><div class="wrap"><table><thead><tr><th>품명</th><th>규격</th><th>단위</th><th class="n">단가</th><th>최근 거래</th><th></th></tr></thead><tbody>
-    ${c.items.map((it,i)=>`<tr><td><input data-ii="${i}" data-k="name" value="${it.name}"></td><td><input data-ii="${i}" data-k="spec" value="${it.spec}" style="width:80px"></td><td><input data-ii="${i}" data-k="unit" value="${it.unit}" style="width:60px"></td>
-      <td class="n"><input data-ii="${i}" data-k="price" value="${it.price}" style="width:100px;text-align:right"></td><td class="mut">${it.last||''}</td><td><button class="btn warn" data-rm="${i}">×</button></td></tr>`).join('')}
-    </tbody></table></div><div class="row" style="margin-top:8px"><div style="flex:0"><button class="btn" id="c-add">+ 품목 추가</button></div><div style="flex:0"><button class="btn pri" id="c-save">저장</button></div></div>`;
-  $('c-add').onclick=()=>{ c.items.push({name:'',spec:'',unit:'EA',price:0}); renderCust(); };
-  $('c-save').onclick=async ()=>{ $('c-body').querySelectorAll('[data-ck]').forEach(e=>{ c[e.dataset.ck] = e.dataset.ck==='opening' ? (parseInt(e.value.replace(/[^\d-]/g,''))||0) : e.value; });
-    $('c-body').querySelectorAll('[data-ii]').forEach(e=>{ const it=c.items[e.dataset.ii]; it[e.dataset.k] = e.dataset.k==='price' ? (parseInt(e.value.replace(/[^\d]/g,''))||0) : e.value; });
-    c.items = c.items.filter(it=>it.name);
-    await must(sb.from('customers').update({legal:c.legal,bizno:c.bizno,ceo:c.ceo,tel:c.tel,addr:c.addr,type:c.type,item:c.item,opening:c.opening,items:c.items,updated_at:new Date().toISOString()}).eq('code',c.code)); fillList(); alert('저장했습니다.'); renderCust(); };
-  $('c-body').onclick = async e=>{ const r=e.target.dataset.rm; if(r!==undefined && confirm('이 품목을 목록에서 뺄까요?')){ c.items.splice(r,1); await must(sb.from('customers').update({items:c.items}).eq('code',c.code)); renderCust(); } };
+    ${edit.items.map((it,i)=>`<tr><td><input data-ii="${i}" data-k="name" value="${customerEscape(it.name)}"></td><td><input data-ii="${i}" data-k="spec" value="${customerEscape(it.spec)}" style="width:80px"></td><td><input data-ii="${i}" data-k="unit" value="${customerEscape(it.unit)}" style="width:60px"></td><td class="n"><input data-ii="${i}" data-k="price" value="${customerEscape(it.price)}" style="width:100px;text-align:right"></td><td class="mut">${customerEscape(it.last)}</td><td><button class="btn warn" data-rm="${i}" ${edit.pending?'disabled':''}>×</button></td></tr>`).join('')}
+    </tbody></table></div><div class="row" style="margin-top:8px"><div style="flex:0"><button class="btn" id="c-add">+ 품목 추가</button></div><div style="flex:0"><button class="btn pri" id="c-save">저장</button></div><div style="flex:0"><button class="btn" id="c-reload">저장값 다시 불러오기</button></div></div>`;
+  ['c-save','c-add','c-reload'].forEach(id=>$(id).disabled=edit.pending);
+  $('c-add').onclick=()=>{ if(edit.pending) return; captureCustomerDraft(); edit.items.push({name:'',spec:'',unit:'EA',price:0,_rowKey:++customerRowSequence,_originalPrice:0}); renderCust(); };
+  $('c-reload').onclick=()=>{ if(edit.pending) return; captureCustomerDraft(); if(edit.conflict&&cust(c.code)===edit.conflictRef)return alert('겹친 요청의 결과는 아직 확정할 수 없습니다. 편집 내용을 보관한 뒤 상단 새로고침으로 장부를 조회하고 다시 확인하세요.'); if((edit.conflict||customerSnapshot(edit)!==edit.clean)&&!confirm('이 거래처의 미저장 편집을 버리고 저장값을 다시 불러올까요?')) return; customerDrafts.delete(c.code); activeCustomerDraft=null; renderCust(); };
+  $('c-save').onclick=async ()=>{
+    if(edit.pending) return;
+    if(customerWriteLocks.has(c.code)) return alert('명세서의 거래처 단가 갱신 중입니다. 완료 후 다시 저장하세요. 현재 편집은 유지했습니다.');
+    captureCustomerDraft();
+    if(edit.conflict||edit.base!==customerBase(c)) return alert('다른 작업에서 이 거래처 정보가 바뀌었습니다. 편집 내용을 확인한 뒤 저장값을 다시 불러와 비교하세요. 현재 편집은 유지했습니다.');
+    if(edit.items.some(it=>!String(it.name??'').trim())) return alert('품명이 없는 행을 채우거나 삭제하세요. 일부 입력을 제외하고 저장하지 않습니다.');
+    const draft={...c,...edit.fields,items:[]}; let invalid=false;
+    draft.opening=parseOpeningWon(String(edit.fields.opening??'')); if(draft.opening===null) invalid=true;
+    edit.items.forEach(it=>{
+      const price=String(it.price??'')===String(it._originalPrice)&&Number.isFinite(it._originalPrice)?it._originalPrice:parseCatalogPriceWon(String(it.price??''));
+      if(price===null) invalid=true;
+      const {_rowKey,_originalPrice,...data}=it;
+      if(data.name) draft.items.push({...data,price});
+    });
+    if(invalid) return alert('기초잔액은 원 단위 정수, 단가는 음수 없는 원 단위 정수로 입력하세요. 쉼표는 천 단위로만 사용할 수 있습니다.');
+    if(bizNoValid(draft.bizno)===false) return alert(`사업자번호 ${draft.bizno} 가 맞지 않습니다(자릿수 또는 검증 숫자 오류). 사업자등록증을 다시 확인하세요. 모르면 빈칸으로 두세요. 현재 편집은 유지했습니다.`);
+    const sent=customerSnapshot(edit), submittedRows=edit.items.map(it=>({...it})), requestBase=customerBase(c); edit.pending=true;
+    draft.updated_at=new Date().toISOString();
+    ['c-save','c-add','c-reload'].forEach(id=>$(id).disabled=true);
+    try{
+      await must(sb.from('customers').update({legal:draft.legal,bizno:draft.bizno,ceo:draft.ceo,tel:draft.tel,addr:draft.addr,type:draft.type,item:draft.item,opening:draft.opening,items:draft.items,updated_at:draft.updated_at}).eq('code',c.code));
+      captureCustomerDraft();
+      if(cust(c.code)!==c||customerBase(c)!==requestBase){edit.conflict=true;edit.conflictRef=c;alert(`${c.name||c.code} 저장 요청은 응답했지만 다른 변경과 겹쳤습니다. 현재 편집을 유지했습니다. 다시 저장하지 말고 장부를 새로 조회해 확인하세요.`);return;}
+      Object.assign(c,draft); edit.base=customerBase(c);
+      if(customerSnapshot(edit)===sent){
+        const fresh=makeCustomerDraft(c); customerDrafts.set(c.code,fresh);
+        if(activeCustomerDraft===edit) activeCustomerDraft=null;
+      }else{
+        edit.baseRowKeys=submittedRows.filter(row=>row.name).map(row=>row._rowKey);
+        edit.baseRowKeys.forEach((key,i)=>{const live=edit.items.find(x=>x._rowKey===key);if(live)live._originalPrice=draft.items[i].price;});
+        edit.clean=customerSnapshot({...edit,fields:draft,items:draft.items.map((it,i)=>({...it,_rowKey:edit.baseRowKeys[i]}))});
+      }
+      fillList(); alert(`${c.name||c.code} 거래처의 요청한 내용을 저장했습니다.`+(customerSnapshot(edit)!==sent?' 대기 중 새로 편집한 값은 따로 유지합니다.':''));
+    }finally{ edit.pending=false; renderCust(); }
+  };
+  $('c-body').onclick=async e=>{
+    const r=e.target.dataset.rm; if(r===undefined||edit.pending) return;
+    if(customerWriteLocks.has(c.code)) return alert('명세서의 거래처 단가 갱신 중입니다. 완료 후 다시 확인하세요. 현재 편집은 유지했습니다.');
+    captureCustomerDraft();
+    const row=edit.items[Number(r)]; if(!row) return;
+    if(!edit.baseRowKeys.includes(row._rowKey)){
+      if(!confirm('저장하지 않은 이 초안 행을 버릴까요?')) return;
+      edit.items=edit.items.filter(it=>it._rowKey!==row._rowKey);activeCustomerDraft=null;renderCust();return;
+    }
+    if(customerSnapshot(edit)!==edit.clean) return alert('미저장 편집을 먼저 저장한 뒤 품목을 삭제하세요. 현재 편집은 유지했습니다.');
+    if(edit.conflict||edit.base!==customerBase(c)) return alert('거래처 저장값이 바뀌었습니다. 현재 편집을 확인하고 저장값을 다시 불러오세요.');
+    if(!confirm('이 품목을 목록에서 뺄까요?')) return;
+    const nextKeys=edit.baseRowKeys.filter((key,i)=>key!==row._rowKey&&c.items[i].name);
+    const nextItems=c.items.filter((it,i)=>edit.baseRowKeys[i]!==row._rowKey&&it.name), sentRow=JSON.stringify(row), oldClean=JSON.parse(edit.clean), requestBase=customerBase(c); edit.pending=true;
+    ['c-save','c-add','c-reload'].forEach(id=>$(id).disabled=true);
+    try{
+      await must(sb.from('customers').update({items:nextItems}).eq('code',c.code));
+      captureCustomerDraft();
+      if(cust(c.code)!==c||customerBase(c)!==requestBase){edit.conflict=true;edit.conflictRef=c;alert('삭제 요청은 응답했지만 다른 변경과 겹쳤습니다. 현재 편집을 유지했습니다. 다시 저장하지 말고 장부를 새로 조회해 확인하세요.');return;}
+      c.items=nextItems; edit.baseRowKeys=nextKeys; edit.base=customerBase(c);
+      const live=edit.items.find(x=>x._rowKey===row._rowKey);
+      if(live&&JSON.stringify(live)===sentRow) edit.items=edit.items.filter(x=>x._rowKey!==row._rowKey);
+      else alert('요청한 품목은 저장 목록에서 삭제됐습니다. 대기 중 편집한 행은 미저장 초안으로 유지했습니다.');
+      edit.clean=JSON.stringify([oldClean[0],oldClean[1].filter(it=>it[0]!==row._rowKey)]);
+      if(activeCustomerDraft===edit) activeCustomerDraft=null;
+    }finally{ edit.pending=false; renderCust(); }
+  };
 }
+
+/* ── 거래처별 택배비 기준 편집: settings 「ship_rules」 한 줄에 거래처 코드별로 보관 ── */
+function renderShipRule(c){
+  if(!c){ $('c-ship').innerHTML=''; return; }
+  const r=shipRuleFor(c)||{type:'',price:'',omPrice:''};
+  $('c-ship').innerHTML=`<h2>택배비 기준</h2><div class="row">
+    <div style="max-width:200px"><label>기준</label><select id="cs-type"><option value="">미등록(자동 계산 안 함)</option>${Object.keys(SHIP_TYPES).map(k=>`<option ${r.type===k?'selected':''}>${k}</option>`).join('')}</select></div>
+    <div style="max-width:140px"><label>1건 단가(원)</label><input id="cs-price" inputmode="numeric" value="${customerEscape(r.price)}"></div>
+    <div style="max-width:160px"><label>오말랭이 20kg 단가(100kg면제형)</label><input id="cs-om" inputmode="numeric" value="${customerEscape(r.omPrice)}"></div>
+    <div style="flex:0"><button class="btn pri" id="cs-save">기준 저장</button></div></div>
+    <p class="mut" id="cs-desc">${SHIP_TYPES[r.type]||'기준을 고르면 명세서 작성 때 택배비 줄을 자동으로 넣습니다.'}</p>`;
+  $('cs-type').onchange=()=>{ $('cs-desc').textContent=SHIP_TYPES[$('cs-type').value]||'기준을 고르면 명세서 작성 때 택배비 줄을 자동으로 넣습니다.'; };
+  $('cs-save').onclick=async ()=>{
+    if($('cs-save').disabled) return;
+    const type=$('cs-type').value, price=parseCatalogPriceWon($('cs-price').value), om=parseCatalogPriceWon($('cs-om').value);
+    if(type && type!=='없음' && !price) return alert('1건 단가를 원 단위 숫자로 넣으세요.');
+    if(om===null) return alert('오말랭이 단가는 원 단위 숫자로 넣거나 비워 두세요.');
+    $('cs-save').disabled=true;
+    try{
+      // 다른 컴퓨터에서 바꾼 기준을 덮어쓰지 않도록 저장 직전에 최신 값을 다시 읽어 이 거래처만 바꾼다
+      const fresh=await must(sb.from('settings').select('value').eq('key','ship_rules').maybeSingle());
+      const all={...(fresh?.value||{})};
+      if(!type) delete all[c.code];
+      else all[c.code]={type, price:type==='없음'?0:price, ...(type==='100kg면제형'&&om?{omPrice:om}:{}), updated:today()};
+      await must(sb.from('settings').upsert({key:'ship_rules',value:all,updated_at:new Date().toISOString()}));
+      db.shipRules=all; alert(`${c.name} 택배비 기준을 저장했습니다.`);
+    } finally{ $('cs-save').disabled=false; }
+    renderShipRule(c);
+  };
+}
+
+/* ── 생산 → 원료 사용 (배합비 % × kg × 로스계수, 절임배추잎 같은 중간재는 원물로 환산) ── */
+const kg3 = n => (Math.round(n*1000)/1000).toLocaleString('ko-KR',{maximumFractionDigits:3});
+function usesFor(product, kg){
+  const r = db.recipes[product]; if(!r) return null; const out={};
+  Object.entries(r).forEach(([raw,pct])=>{ let q = kg*pct/100*db.loss; const cv=db.rawConv[raw]; if(cv){ raw=cv.raw; q*=cv.factor; }
+    out[raw]=(out[raw]||0)+q; });
+  return Object.entries(out).map(([raw,qty])=>({raw, qty:Math.round(qty*1000)/1000})).sort((a,b)=>b.qty-a.qty);
+}
+function recipeName(word){ const w=word.replace(/\s/g,''); if(db.recipes[w]) return w; if(db.prodAlias[w]) return db.prodAlias[w];
+  const hits=Object.keys(db.recipes).filter(k=>k.replace(/\s/g,'').includes(w)); return hits.length===1?hits[0]:null; }
+const usesText = us => us.map(u=>u.raw+' '+kg3(u.qty)).join(', ');
+let plines = [];
+function drawProd(){
+  $('pr-table').tBodies[0].innerHTML = plines.map((l,i)=>{ const us=l._kgText!==undefined?null:usesFor(l.product,l.kg);
+    return `<tr><td><input data-pi="${i}" data-k="product" value="${String(l.product??'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;')}" list="recipelist" style="${us?'':'color:var(--wine);font-weight:bold'}"></td>
+      <td class="n"><input data-pi="${i}" data-k="kg" value="${String(l._kgText??l.kg).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;')}" inputmode="decimal" style="width:90px;text-align:right"></td>
+      <td style="white-space:normal;font-size:12px">${l._kgText!==undefined?'수량 확인':us?usesText(us):'<b style="color:var(--wine)">배합비 없음 — 목록에서 품목을 고르세요</b>'}</td>
+      <td><button class="btn warn" data-pdel="${i}">×</button></td></tr>`; }).join('') || '<tr><td colspan="4" class="mut">붙여넣기나 빈 줄 추가로 생산 품목을 넣으세요.</td></tr>';
+}
+$('pr-read').onclick = ()=>{ const t=$('pr-paste').value; if(!t.trim()) return;
+  if(plines.some(l=>l._kgText!==undefined)) return alert('잘못된 수량을 먼저 수정하세요.');
+  if(/\d,\d|\d\.\d*\.|\d[eE][+-]?\d|[+-]\s*\d/.test(t)) return alert('자동 해석이 불명확한 숫자 표기입니다. 수량을 직접 입력하세요.');
+  if(t.split(/\r?\n/).filter(x=>x.trim()).some(x=>!/^\s*[가-힣A-Za-z()]{1,20}\s*:?\s*\d+(?:\.\d+)?\s*(?:kg|KG|키로|킬로)?\s*$/.test(x))) return alert('생산 붙여넣기는 한 줄에 품목과 kg 수량만 확인 가능합니다. 다른 단위나 설명은 직접 확인해 입력하세요.');
+  const re=/([가-힣A-Za-z()]{1,20})\s*[:\-]?\s*(\d+(?:\.\d+)?)\s*(?:kg|KG|키로|킬로)?/g; let m, ok=0; const miss=[];
+  while((m=re.exec(t))){ const name=recipeName(m[1]), kg=parseFloat(m[2]); if(!kg) continue;
+    if(!name){ miss.push(m[1]+' '+m[2]); plines.push({product:m[1],kg}); continue; }
+    const ex=plines.find(l=>l.product===name); if(ex) ex.kg+=kg; else plines.push({product:name,kg}); ok++; }
+  drawProd(); $('pr-msg').innerHTML = `${ok}개 품목을 읽었습니다.`+(miss.length?` <b style="color:var(--wine)">배합비를 못 찾은 것: ${miss.join(', ')}</b>`:''); };
+$('pr-addrow').onclick = ()=>{ plines.push({product:'',kg:0}); drawProd(); };
+$('pr-clear').onclick = ()=>{ plines=[]; $('pr-paste').value=''; $('pr-memo').value=''; $('pr-msg').textContent=''; drawProd(); };
+$('pr-table').addEventListener('change', e=>{ const i=e.target.dataset.pi, k=e.target.dataset.k; if(i===undefined) return;
+  if(k==='kg'){
+    const kg=e.target.value.trim()===''?0:parseRawQuantityKg(e.target.value);
+    plines[i].kg=kg;
+    if(kg===null) plines[i]._kgText=e.target.value; else delete plines[i]._kgText;
+  } else plines[i][k]=recipeName(e.target.value)||e.target.value;
+  drawProd(); });
+$('pr-table').addEventListener('click', e=>{ const d=e.target.dataset.pdel; if(d===undefined) return; plines.splice(d,1); drawProd(); });
+$('pr-save').onclick = async ()=>{
+  if($('pr-save').disabled) return;
+  if(plines.some(l=>l._kgText!==undefined || !Number.isFinite(l.kg))) return alert('잘못된 수량을 먼저 수정하세요.');
+  if(plines.some(l=>l.kg<=0 || !l.product.trim())) return alert('생산 품목과 0보다 큰 수량을 확인하세요. 저장에서 제외될 행을 먼저 수정하거나 삭제하세요.');
+  const ls = plines; if(!ls.length) return alert('생산 품목을 넣으세요.');
+  const bad = ls.filter(l=>!db.recipes[l.product]); if(bad.length) return alert('배합비가 없는 품목이 있습니다: '+bad.map(l=>l.product).join(', '));
+  const inputSnapshot=JSON.stringify([plines,...['pr-date','pr-memo','pr-paste'].map(id=>$(id).value)]);
+  const d=$('pr-date').value||today(); $('pr-save').disabled=true;
+  try{ const rows = await must(sb.from('prods').insert(ls.map(l=>({date:d, product:l.product, kg:l.kg, loss:db.loss, uses:usesFor(l.product,l.kg), source:'직접', memo:$('pr-memo').value}))).select());
+    rows.forEach(r=>db.prods.push({...r, kg:Number(r.kg)})); }
+  finally{ $('pr-save').disabled=false; }
+  if(inputSnapshot===JSON.stringify([plines,...['pr-date','pr-memo','pr-paste'].map(id=>$(id).value)])){
+    plines=[]; $('pr-paste').value=''; $('pr-msg').textContent='저장했습니다. 원료수불부에 바로 반영됩니다.';
+  } else alert('앞서 요청한 생산 기록은 저장됐습니다. 대기 중 바꾼 입력은 유지했습니다. 다음 저장 전 내용을 확인하세요.');
+  drawProd(); renderProd(); };
+['pl-from','pl-to'].forEach(id=>$(id).addEventListener('input',renderProd));
+function prodRows(){ const f=$('pl-from').value, t=$('pl-to').value; return db.prods.filter(p=>(!f||p.date>=f)&&(!t||p.date<=t)).sort((a,b)=>b.date.localeCompare(a.date)||b.id.localeCompare(a.id)); }
+function renderProd(){
+  $('pr-loss').textContent = db.loss;
+  $('recipelist').innerHTML = Object.keys(db.recipes).map(k=>`<option value="${k}">`).join('');
+  drawProd(); const rows=prodRows();
+  $('pl-table').tBodies[0].innerHTML = rows.map(p=>`<tr class="${p.canceled?'cancel':''}"><td>${p.date}</td><td>${p.id}</td><td>${p.product}</td><td class="n">${kg3(p.kg)}</td>
+    <td style="white-space:normal;font-size:12px">${usesText(p.uses||[])}</td><td>${p.memo||''}</td><td>${p.canceled?'':`<button class="btn warn" data-c="${p.id}">취소</button>`}</td></tr>`).join('') || '<tr><td colspan="7" class="mut">아직 생산 기록이 없습니다.</td></tr>';
+  const live=rows.filter(p=>!p.canceled); $('pl-total').textContent=kg3(live.reduce((a,p)=>a+p.kg,0)); $('pl-cnt').textContent=`(${live.length}건)`;
+}
+$('pl-table').onclick = async e=>{ const c=e.target.dataset.c;
+  if(c && confirm('이 생산 기록을 취소할까요? (지우지 않고 「취소」로 남기고, 원료 사용도 되돌립니다)')){ const t=new Date().toISOString(); await must(sb.from('prods').update({canceled:t}).eq('id',c)); db.prods.find(p=>p.id===c).canceled=t; renderProd(); } };
+$('pl-print').onclick = ()=>{ const rows=prodRows().filter(p=>!p.canceled).reverse(); const by={}; rows.forEach(p=>(by[p.date] ||= []).push(p));
+  $('print').innerHTML = Object.entries(by).map(([d,ps])=>`<div style="page-break-after:always;font-size:12px"><h2 style="text-align:center">생 산 일 지</h2><p>생산일 ${d} · ${db.me.name||''}</p>
+    <table class="slip" style="height:auto;display:table;width:100%"><tr><th>품목</th><th>생산량(kg)</th><th>투입 원료(kg)</th><th>메모</th></tr>
+    ${ps.map(p=>`<tr><td>${p.product}</td><td style="text-align:right">${kg3(p.kg)}</td><td>${usesText(p.uses||[])}</td><td>${p.memo||''}</td></tr>`).join('')}</table>
+    <p style="text-align:right;margin-top:20px">작성 ________ 확인 ________</p></div>`).join('') || '<p>출력할 생산 기록이 없습니다.</p>';
+  setTimeout(()=>window.print(),50); };
+
+/* ── 원료수불부 ── */
+function rawNames(){ const s=new Set(); Object.values(db.recipes).forEach(r=>Object.keys(r).forEach(k=>s.add(db.rawConv[k]?.raw||k))); db.raws.forEach(r=>s.add(r.raw)); return [...s].sort(); }
+function rawEvents(){   // 원료 한 줄 한 줄: 생산 사용(−), 입고·기초(+), 조정(±)
+  const ev=[]; db.prods.filter(p=>!p.canceled).forEach(p=>(p.uses||[]).forEach(u=>ev.push({d:p.date,raw:u.raw,k:'사용',q:-Number(u.qty),m:p.product+' '+kg3(p.kg)+'kg 생산',id:p.id})));
+  db.raws.filter(r=>!r.canceled).forEach(r=>ev.push({d:r.date,raw:r.raw,k:r.kind,q:r.qty,m:[r.supplier,r.memo].filter(Boolean).join(' · '),id:r.id}));
+  return ev.sort((a,b)=>a.d.localeCompare(b.d)||(a.k==='사용')-(b.k==='사용'));
+}
+['rb-from','rb-to','rb-raw'].forEach(id=>$(id).addEventListener('input',renderRaw));
+function rawOpeningLabel(events, raw, through, before=false){
+  return events.some(e=>e.raw===raw&&e.k==='기초'&&(before?e.d<through:e.d<=through))
+    ? '기초 기록 있음 · 실재고 미확인' : '기초 미등록 · 실재고 미확인';
+}
+function renderRaw(){
+  $('rawlist').innerHTML = rawNames().map(k=>`<option value="${k}">`).join('');
+  const f=$('rb-from').value||'0000', t=$('rb-to').value||'9999', one=$('rb-raw').value.trim(), ev=rawEvents();
+  if(one){ let bal=ev.filter(e=>e.raw===one&&e.d<f).reduce((a,e)=>a+e.q,0);
+    let html=`<h2>${one}</h2><div class="wrap"><table><thead><tr><th>날짜</th><th>구분</th><th>내용</th><th class="n">입고</th><th class="n">사용</th><th class="n">기록 증감합계</th></tr></thead><tbody><tr><td></td><td>이전 기록합계</td><td></td><td></td><td></td><td class="n">${kg3(bal)}<br><small>${rawOpeningLabel(ev,one,f,true)}</small></td></tr>`;
+    ev.filter(e=>e.raw===one&&e.d>=f&&e.d<=t).forEach(e=>{ bal+=e.q; html+=`<tr><td>${e.d}</td><td>${e.k}</td><td>${e.m}</td><td class="n">${e.q>0?kg3(e.q):''}</td><td class="n">${e.q<0?kg3(-e.q):''}</td><td class="n" style="${bal<0?'color:var(--wine);font-weight:bold':''}">${kg3(bal)}<br><small>${rawOpeningLabel(ev,one,e.d)}</small></td></tr>`; });
+    $('rb-body').innerHTML = html+'</tbody></table></div><p class="mut">기록 증감합계는 실제 재고가 아닙니다. 기초 미등록은 재고 0을 뜻하지 않습니다. 기초 기록이 있어도 기준일·누락·중복·실사 대조가 필요합니다.</p>';
+  } else {
+    const agg={}; ev.forEach(e=>{ const a=agg[e.raw] ||= {open:0,in:0,use:0,adj:0}; if(e.d<f) a.open+=e.q; else if(e.d<=t){ if(e.k==='사용') a.use-=e.q; else if(e.k==='조정') a.adj+=e.q; else a.in+=e.q; } });
+    const rows=Object.entries(agg).map(([raw,a])=>({raw,...a,bal:a.open+a.in-a.use+a.adj})).sort((x,y)=>y.use-x.use);
+    $('rb-body').innerHTML = `<div class="wrap"><table><thead><tr><th>원료</th><th class="n">이전 기록합계</th><th class="n">입고</th><th class="n">사용</th><th class="n">조정</th><th class="n">기록 증감합계</th></tr></thead><tbody>`
+      + (rows.map(r=>`<tr><td>${r.raw}</td><td class="n">${kg3(r.open)}</td><td class="n">${kg3(r.in)}</td><td class="n">${kg3(r.use)}</td><td class="n">${r.adj?kg3(r.adj):''}</td><td class="n" style="${r.bal<0?'color:var(--wine);font-weight:bold':''}">${kg3(r.bal)}<br><small>${rawOpeningLabel(ev,r.raw,t)}</small></td></tr>`).join('')
+         || '<tr><td colspan="6" class="mut">아직 기록이 없습니다. 생산을 등록하거나 원료 입고·기초를 넣으세요.</td></tr>')
+      + '</tbody></table></div><p class="mut">기록 증감합계는 실제 재고가 아닙니다. 기초 미등록은 재고 0을 뜻하지 않습니다. 기초 기록이 있어도 기준일·누락·중복·실사 대조가 필요합니다.</p>';
+  }
+  $('rw-table').tBodies[0].innerHTML = db.raws.slice().reverse().slice(0,100).map(r=>`<tr class="${r.canceled?'cancel':''}"><td>${r.date}</td><td>${r.kind}</td><td>${r.raw}</td><td class="n">${kg3(r.qty)} ${r.unit||''}</td><td>${r.supplier||''}</td><td class="n">${r.amt?won(r.amt):''}</td><td>${r.memo||''}</td>
+    <td>${r.canceled?'':`<button class="btn warn" data-c="${r.id}">취소</button>`}</td></tr>`).join('') || '<tr><td colspan="8" class="mut">입고 기록이 없습니다.</td></tr>';
+}
+// Raw-material entry is explicitly kg. No conversion or rounding here.
+function parseRawQuantityKg(value){
+  if(typeof value!=='string') return null;
+  const text=value.trim();
+  if(!/^[+-]?(?:(?:[0-9]+|[1-9][0-9]{0,2}(?:,[0-9]{3})+)(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?$/.test(text)) return null;
+  const quantity=Number(text.replace(/,/g,''));
+  return Number.isFinite(quantity) && Math.abs(quantity)<=Number.MAX_SAFE_INTEGER ? quantity : null;
+}
+/* 포장 단위 환산: settings 「raw_pack」 = {원료: {망: kg}}. 없으면 매입 원장에서 확인한 배추 1망=12kg 만 쓴다. */
+const RAW_PACK_DEFAULT = {'배추':{'망':12}};
+const rawPack = (raw, unit) => unit==='kg' ? 1 : (db.rawPack || RAW_PACK_DEFAULT)[raw]?.[unit] || null;
+// 입고 한 줄을 kg 기준 기록으로 바꾼다. 금액은 입력한 단위 그대로(망 수 × 망 단가) 계산해 반올림 오차를 만들지 않는다.
+function rawEntry(raw, qty, unit, price){
+  const pack=rawPack(raw, unit); if(!pack) return {error:`「${raw}」은 ${unit} 환산값이 없습니다. kg으로 넣거나 설정에 환산값을 등록하세요.`};
+  return {qtyKg:Math.round(qty*pack*1000)/1000, priceKg:price===null?null:price/pack, amt:price===null?null:Math.round(price*qty),
+          note:unit==='kg'?'':`${qty}${unit}${price===null?'':'×'+won(price)} (1${unit}=${pack}kg)`};
+}
+['rw-raw','rw-qty','rw-unit','rw-price'].forEach(id=>$(id).addEventListener('input',()=>{
+  const unit=$('rw-unit').value, raw=$('rw-raw').value.trim(), qty=parseRawQuantityKg($('rw-qty').value);
+  if(unit==='kg'){ $('rw-conv').textContent=''; return; }
+  const pack=rawPack(raw,unit); $('rw-conv').innerHTML = !raw ? '' : !pack ? `<b style="color:var(--wine)">「${customerEscape(raw)}」은 ${unit} 환산값이 없습니다.</b>` : `1${unit}=${pack}kg${qty?` → ${kg3(qty*pack)}kg으로 저장`:''}`; }));
+$('rw-save').onclick = async ()=>{ if($('rw-save').disabled) return; const raw=$('rw-raw').value.trim(), qty=parseRawQuantityKg($('rw-qty').value), parsedPrice=parseUnitPriceWon($('rw-price').value), price=parsedPrice===0?null:parsedPrice, unit=$('rw-unit').value;
+  if(!raw) return alert('원료를 고르세요.'); if(qty===null) return alert('수량은 숫자로 입력하세요. 단위 문자 없이 소수와 올바른 천 단위 쉼표를 사용할 수 있습니다.'); if(qty===0) return alert('수량을 넣으세요.');
+  if(parsedPrice===null) return alert('단가 형식을 확인하세요. 숫자와 올바른 천 단위 쉼표만 입력하세요.');
+  if(price!==null && !Number.isSafeInteger(Math.round(price*qty))) return alert('계산 금액이 안전한 범위를 넘습니다.');
+  const ent=rawEntry(raw, qty, unit, price); if(ent.error) return alert(ent.error);
+  const inputSnapshot=['rw-raw','rw-date','rw-kind','rw-qty','rw-unit','rw-price','rw-sup','rw-memo'].map(id=>[id,$(id).value]);
+  $('rw-save').disabled=true; let row;
+  try{ row = await must(sb.from('raw_moves').insert({date:$('rw-date').value||today(), kind:$('rw-kind').value, raw, qty:ent.qtyKg, unit:'kg', supplier:$('rw-sup').value||null, price:ent.priceKg, amt:ent.amt, memo:[ent.note,$('rw-memo').value].filter(Boolean).join(' · ')||null}).select().single()); }finally{ $('rw-save').disabled=false; }
+  db.raws.push({...row, qty:Number(row.qty), amt:Number(row.amt)||0});
+  if(inputSnapshot.every(([id,value])=>$(id).value===value)) ['rw-qty','rw-price','rw-memo'].forEach(id=>$(id).value='');
+  else alert('앞서 요청한 원료 기록은 저장됐습니다. 대기 중 바꾼 입력은 지우지 않고 유지했습니다. 다음 저장 전 내용을 확인하세요.');
+  renderRaw(); };
+$('rw-table').onclick = async e=>{ const c=e.target.dataset.c; if(c && confirm('이 기록을 취소할까요?')){ const t=new Date().toISOString(); await must(sb.from('raw_moves').update({canceled:t}).eq('id',c)); db.raws.find(r=>r.id===c).canceled=t; renderRaw(); } };
+$('rb-print').onclick = ()=>{ renderRaw(); $('print').innerHTML = `<div style="font-size:12px"><h2 style="text-align:center">원 료 수 불 부</h2><p>${$('rb-from').value||'처음'} ~ ${$('rb-to').value||'오늘'}</p>${$('rb-body').innerHTML}</div>`; setTimeout(()=>window.print(),50); };
 
 /* ── 설정·백업 ── */
 const ME=['name','bizno','ceo','addr','type','item','tel','bank'];
 function renderSet(){ ME.forEach(k=>$('me-'+k).value=db.me[k]||''); }
-$('me-save').onclick=async ()=>{ ME.forEach(k=>db.me[k]=$('me-'+k).value); await must(sb.from('settings').upsert({key:'me',value:db.me,updated_at:new Date().toISOString()})); alert('저장했습니다.'); };
+$('me-save').onclick=async ()=>{
+  if($('me-save').disabled) return;
+  const draft={...db.me}; ME.forEach(k=>draft[k]=$('me-'+k).value);
+  $('me-save').disabled=true;
+  try{ await must(sb.from('settings').upsert({key:'me',value:draft,updated_at:new Date().toISOString()}));
+    db.me=draft; alert('저장했습니다.'); }
+  finally{ $('me-save').disabled=false; }
+};
 $('bk-down').onclick=()=>{ const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([JSON.stringify(db)],{type:'application/json'})); a.download='납품장부_백업_'+today()+'.json'; a.click(); };
 
 async function start(){
@@ -440,7 +1217,7 @@ async function start(){
   if(!mem.data){ $('login').style.display='flex'; $('lg-msg').innerHTML = `<b style="color:var(--wine)">${session.user.email} 은 아직 등록되지 않았습니다.</b> 대표님께 이 이메일 등록을 요청하세요.`; return; }
   $('login').style.display='none'; $('who').textContent = (mem.data.name||'')+' '+session.user.email;
   try{ await load(); }catch(e){ alert('장부를 못 불러왔습니다: '+e.message); return; }
-  fillList(); $('s-date').value ||= today(); $('p-date').value ||= today(); $('mc-month').value ||= today().slice(0,7); drawLines();
+  fillList(); $('s-date').value ||= today(); $('p-date').value ||= today(); $('mc-month').value ||= today().slice(0,7); $('pr-date').value ||= today(); $('rw-date').value ||= today(); drawLines();
 }
 $('lg-in').onclick = async ()=>{ $('lg-msg').textContent='확인 중…';
   const { error } = await sb.auth.signInWithPassword({ email:$('lg-email').value.trim(), password:$('lg-pw').value });
