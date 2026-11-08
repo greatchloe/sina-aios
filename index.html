@@ -57,6 +57,7 @@ td input{padding:4px 6px}
   <label>이메일</label><input id="lg-email" type="email" autocomplete="username">
   <label style="margin-top:8px">비밀번호</label><input id="lg-pw" type="password" autocomplete="current-password">
   <div class="row" style="margin-top:12px"><div><button class="btn pri" id="lg-in" style="width:100%">로그인</button></div><div><button class="btn" id="lg-up" style="width:100%">처음이면 가입</button></div></div>
+  <p style="margin:8px 0 0;text-align:right"><button class="btn" id="lg-forgot" style="padding:3px 10px;font-size:12px">비밀번호를 잊었어요</button></p>
   <p id="lg-msg" class="mut" style="margin-top:8px"></p>
 </div></div>
 <header>
@@ -288,6 +289,14 @@ td input{padding:4px 6px}
       <div><label>주소</label><input id="me-addr"></div><div><label>업태</label><input id="me-type"></div><div><label>종목</label><input id="me-item"></div><div><label>전화</label><input id="me-tel"></div>
     </div>
     <div class="row" style="margin-top:8px"><div><label>입금 계좌(명세서 하단)</label><input id="me-bank"></div><div style="flex:0"><button class="btn pri" id="me-save">저장</button></div></div>
+  </div>
+  <div class="card" id="pw-card"><h2>내 비밀번호 바꾸기</h2>
+    <p id="pw-note" class="mut">지금 로그인한 계정의 비밀번호를 새로 정합니다. 8자 이상.</p>
+    <div class="row">
+      <div style="max-width:220px"><label>새 비밀번호</label><input id="pw-new" type="password" autocomplete="new-password"></div>
+      <div style="max-width:220px"><label>한 번 더</label><input id="pw-new2" type="password" autocomplete="new-password"></div>
+      <div style="flex:0"><button class="btn pri" id="pw-save">비밀번호 바꾸기</button></div>
+    </div>
   </div>
   <div class="card"><h2>백업</h2>
     <p class="mut">장부는 클라우드에 저장돼 모든 컴퓨터·휴대폰이 같은 내용을 봅니다. 무료 요금제라 자동 백업이 없으니, 하루 한 번 「백업 받기」로 파일을 보관하세요.</p>
@@ -1217,7 +1226,7 @@ async function start(){
   if(!mem.data){ $('login').style.display='flex'; $('lg-msg').innerHTML = `<b style="color:var(--wine)">${session.user.email} 은 아직 등록되지 않았습니다.</b> 대표님께 이 이메일 등록을 요청하세요.`; return; }
   $('login').style.display='none'; $('who').textContent = (mem.data.name||'')+' '+session.user.email;
   try{ await load(); }catch(e){ alert('장부를 못 불러왔습니다: '+e.message); return; }
-  fillList(); $('s-date').value ||= today(); $('p-date').value ||= today(); $('mc-month').value ||= today().slice(0,7); $('pr-date').value ||= today(); $('rw-date').value ||= today(); drawLines();
+  fillList(); $('s-date').value ||= today(); $('p-date').value ||= today(); $('mc-month').value ||= today().slice(0,7); $('pr-date').value ||= today(); $('rw-date').value ||= today(); drawLines(); showPwRecovery();
 }
 $('lg-in').onclick = async ()=>{ $('lg-msg').textContent='확인 중…';
   const { error } = await sb.auth.signInWithPassword({ email:$('lg-email').value.trim(), password:$('lg-pw').value });
@@ -1227,9 +1236,34 @@ $('lg-up').onclick = async ()=>{ const email=$('lg-email').value.trim(), pw=$('l
   if(pw.length<8) return $('lg-msg').textContent='비밀번호는 8자 이상으로 정하세요.';
   const { error } = await sb.auth.signUp({ email, password:pw, options:{ emailRedirectTo: location.href.split('#')[0] } });
   $('lg-msg').textContent = error ? '가입 실패: '+error.message : '가입 확인 메일을 보냈습니다. 메일의 링크를 누른 뒤 로그인하세요.'; };
+/* ── 비밀번호: 재설정 메일 → 링크로 들어오면 설정 탭에서 새 비밀번호 ── */
+$('lg-forgot').onclick = async ()=>{ const email=$('lg-email').value.trim();
+  if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return $('lg-msg').textContent='위 이메일 칸에 가입한 이메일을 먼저 쓰세요.';
+  $('lg-msg').textContent='보내는 중…';
+  const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: location.href.split('#')[0].split('?')[0] });
+  $('lg-msg').textContent = error ? '보내지 못했습니다: '+error.message : '비밀번호 재설정 메일을 보냈습니다. 메일의 링크를 누르면 이 화면으로 돌아와 「설정·백업」에서 새 비밀번호를 정할 수 있습니다.'; };
+function pwProblem(a, b){
+  if(a.length<8) return '비밀번호는 8자 이상으로 정하세요.';
+  if(a!==b) return '두 칸의 비밀번호가 다릅니다.';
+  return '';
+}
+$('pw-save').onclick = async ()=>{ if($('pw-save').disabled) return;
+  const a=$('pw-new').value, b=$('pw-new2').value, bad=pwProblem(a,b); if(bad) return alert(bad);
+  $('pw-save').disabled=true;
+  try{ const { error } = await sb.auth.updateUser({ password:a });
+    if(error) return alert('비밀번호를 바꾸지 못했습니다: '+error.message+(/reauth|recent/i.test(error.message)?' — 나가기 후 다시 로그인하거나, 재설정 메일 링크로 들어온 직후에 바꾸세요.':''));
+    $('pw-new').value=''; $('pw-new2').value=''; $('pw-note').textContent='비밀번호를 바꿨습니다. 다음 로그인부터 새 비밀번호를 쓰세요.'; alert('비밀번호를 바꿨습니다.'); }
+  finally{ $('pw-save').disabled=false; } };
+let pwRecovery=/type=recovery/.test(location.hash);   // 인증 라이브러리가 주소를 지우기 전에 확인
 $('logout').onclick = async ()=>{ await sb.auth.signOut(); location.reload(); };
 $('reload').onclick = async ()=>{ await load(); fillList(); setCust(); document.querySelector('#nav .on').click(); };
-sb.auth.onAuthStateChange((ev)=>{ if(ev==='SIGNED_IN' && $('login').style.display!=='none') start(); });
+sb.auth.onAuthStateChange((ev)=>{
+  if(ev==='PASSWORD_RECOVERY'){ pwRecovery=true; if($('login').style.display!=='none') start(); }
+  if(ev==='SIGNED_IN' && $('login').style.display!=='none') start(); });
+// 재설정 메일 링크로 들어왔으면 장부를 연 뒤 바로 비밀번호 칸으로 보낸다
+function showPwRecovery(){ if(!pwRecovery) return; pwRecovery=false;
+  document.querySelector('#nav button[data-v="set"]').click();
+  $('pw-note').innerHTML='<b style="color:var(--wine)">재설정 링크로 들어왔습니다. 새 비밀번호를 정하세요.</b>'; $('pw-new').focus(); }
 $('login').style.display='none'; start();
 </script>
 </body>
