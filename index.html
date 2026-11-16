@@ -482,7 +482,7 @@ $('s-read').onclick = ()=>{
 // 기준은 2026-07~10 전표 459건에서 찾은 것(452건 일치). 근거: 업무도구/결과/거래처별_택배비_기준_20261105.xlsx
 const SHIP_TYPES = {
   '박스마다': '무게와 상관없이 박스마다 부과. 10kg 이상은 1개당 1박스, 10kg 미만은 10kg 단위로 묶어 1박스',
-  '100kg면제형': '김치·무채·얼갈이·열무물 합계 100kg 이상이면 무료, 미만이면 10kg 한 개(작은 것은 10kg 묶음)마다 부과. 장아찌는 2개당 1건(올림), 오말랭이 20kg는 개당 1건(별도 단가), 김치양념은 100kg 미만일 때 3개당 1건',
+  '100kg면제형': '김치·무채·얼갈이·열무물 합계 100kg 이상이면 무료, 미만이면 10kg 한 개(작은 것은 10kg 묶음)마다 부과. 장아찌는 100kg과 상관없이 개당 1건(대표 11/16, 예전 2개당 1건), 오말랭이 20kg는 개당 1건(별도 단가), 김치양념은 100kg 미만일 때 3개당 1건',
   '장아찌만': '장아찌 개수만큼 부과(다른 품목은 무료)',
   '없음': '택배비를 받지 않음'};
 function shipGroup(name){
@@ -511,7 +511,7 @@ function shipFee(rule, ls){
     items.forEach(l=>{ if(shipGroup(l.name)!=='X') return; const k=shipKg(l.name,l.spec), q=Number(l.qty)||0;
       if(k===null){ xBox+=q; xKg+=10*q; } else { xKg+=k*q; if(k>=10) xBox+=q; else xSmall+=k*q; } });
     const under=c.A*10+xKg<100;
-    add((under?c.A+xBox+Math.ceil(xSmall/10-1e-9):0)+Math.ceil(c.J/2)+(under?Math.ceil(c.Y/3):0), price);
+    add((under?c.A+xBox+Math.ceil(xSmall/10-1e-9):0)+c.J+(under?Math.ceil(c.Y/3):0), price);
     add(c.O, Number(rule.omPrice)||price, '오말랭이 20kg');
   } else if(rule.type==='박스마다'){
     let boxes=0, small=0;
