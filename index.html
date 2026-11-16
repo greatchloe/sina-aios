@@ -114,6 +114,26 @@ td input{padding:4px 6px}
     <p id="s-out" style="color:var(--wine);font-weight:bold"></p>
     <p class="mut">「발주로 저장」은 매출에 넣지 않고 발주 목록에만 올립니다(거래일 칸 = 출고 예정일). 「저장하고 출력」을 누르면 매출장부와 업체별 원장에 바로 들어갑니다. 출력은 A4 한 장에 「공급받는자용」「공급자 보관용」 두 장이 나옵니다.</p>
   </div>
+  <div class="card" id="cv-card">
+    <h2>송장 (택배로 나가는 거래처) <span id="cv-helper" class="mut" style="font-size:13px;font-weight:normal"></span></h2>
+    <p class="mut">택배 거래처 명세서를 저장하면 아래에 자동으로 채워집니다. 「추가주문표에 넣기」 → 자동수집기 「수기 주문 추가」 → 롯데 접수(대표 확인). 주문취합 PC의 「신아 납품 처리기」 아이콘으로 연 창에서만 바로 넣을 수 있습니다.</p>
+    <div id="cv-list" class="chips"></div>
+    <div class="row" style="margin-top:8px">
+      <div style="max-width:200px"><label>명세서 번호</label><input id="cv-slip" readonly></div>
+      <div><label>받는 사람(상호)</label><input id="cv-name"></div>
+      <div style="max-width:200px"><label>전화번호</label><input id="cv-tel" inputmode="tel"></div>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <div><label>주소</label><input id="cv-addr"></div>
+      <div style="max-width:260px"><label>배송메시지</label><input id="cv-msg"></div>
+    </div>
+    <div style="margin-top:8px"><label>주문내역 (현장 표기: 품목무게x개수, / 로 구분)</label><input id="cv-items"></div>
+    <div style="margin-top:8px"><label style="display:inline"><input type="checkbox" id="cv-savetel" style="width:auto"> 전화·주소를 거래처 정보에도 저장</label></div>
+    <div class="row" style="margin-top:10px;justify-content:flex-end">
+      <div style="flex:0"><button class="btn pri" id="cv-send">추가주문표에 넣기</button></div>
+    </div>
+    <p id="cv-out" style="font-weight:bold"></p>
+  </div>
 </section>
 
 <!-- 발주 목록 -->
@@ -147,7 +167,8 @@ td input{padding:4px 6px}
     </div>
   </div>
   <div class="card"><div class="wrap"><table id="sl-table"><thead><tr><th>날짜</th><th>번호</th><th>거래처</th><th>품목</th><th class="n">금액</th><th></th></tr></thead><tbody></tbody></table></div>
-  <p>합계 <span class="tot" id="sl-total">0</span> 원 <span class="mut" id="sl-cnt"></span></p></div>
+  <p>합계 <span class="tot" id="sl-total">0</span> 원 <span class="mut" id="sl-cnt"></span></p>
+  <p class="mut" id="sl-online"></p></div>
 </section>
 
 <!-- 업체별 원장 -->
@@ -227,6 +248,17 @@ td input{padding:4px 6px}
     </div>
   </div>
   <div class="card">
+    <h2>하루 마감 <span class="mut">(그날 최종 생산량 = 온라인 + B2B 명세서 + 샘플·재발송·지인출고 등)</span></h2>
+    <p class="mut">위 「생산일」 날짜로 계산합니다. 수입(사입) 품목과 배합비가 없는 품목(젓갈·장아찌 등)은 생산에서 빼고 따로 보여 드립니다.</p>
+    <label>① 온라인 — 아래 버튼으로 자동 채우기, 또는 출고기록 엑셀(업무도구/출고기록/연도/날짜.xlsx) 「품목별 합계」 시트에서 품목~총 kg 칸을 복사해 붙여넣기</label>
+    <textarea id="pc-online" rows="4" placeholder="품목	규격	수량(개)	총 중량(kg) …"></textarea>
+    <label style="margin-top:8px">② 기타 출고 — 한 줄에 「구분 품목 kg」 (구분: 샘플·재발송·지인출고·증정·시식·기타)</label>
+    <textarea id="pc-etc" rows="3" placeholder="샘플 포기 3&#10;재발송 파김치 1"></textarea>
+    <div style="margin-top:6px"><button class="btn" id="pc-cloud">취합기가 올린 그날 온라인 자료로 ① 채우기</button> <span id="pc-cloud-msg" class="mut"></span></div>
+    <div style="margin-top:6px"><button class="btn pri" id="pc-fill">마감 합계 계산 (B2B 명세서 자동 포함)</button></div>
+    <div id="pc-body" style="margin-top:10px"></div>
+  </div>
+  <div class="card">
     <div class="wrap"><table id="pr-table"><thead><tr><th>품목(배합비 이름)</th><th class="n">생산량 kg</th><th>투입 원료 (kg)</th><th></th></tr></thead><tbody></tbody></table></div>
     <datalist id="recipelist"></datalist>
     <div class="row" style="margin-top:10px;justify-content:flex-end">
@@ -268,6 +300,7 @@ td input{padding:4px 6px}
   </div>
   <div class="card">
     <h2>원료수불부 <span class="mut">(이월 + 입고 − 사용 ± 조정 = 재고)</span></h2>
+    <p id="rb-audit" class="mut"></p>
     <div class="row">
       <div style="max-width:160px"><label>시작</label><input type="date" id="rb-from"></div>
       <div style="max-width:160px"><label>끝</label><input type="date" id="rb-to"></div>
@@ -314,7 +347,7 @@ const today = () => new Date(Date.now()-new Date().getTimezoneOffset()*60000).to
 const $ = id => document.getElementById(id);
 let db;
 async function load(){
-  const [me, al, cs, sl, py, st, pr, rw, od] = await Promise.all([
+  const [me, al, cs, sl, py, st, pr, rw, od, ol] = await Promise.all([
     sb.from('settings').select('value').eq('key','me').maybeSingle(),
     sb.from('settings').select('value').eq('key','cust_alias').maybeSingle(),
     sb.from('customers').select('*').order('code'),
@@ -323,14 +356,16 @@ async function load(){
     sb.from('settings').select('key,value').in('key',['recipes','prod_alias','raw_conv','loss','ship_rules','pay_alias','opening_date','raw_pack']),
     sb.from('prods').select('*').order('date').range(0, 49999),
     sb.from('raw_moves').select('*').order('date').range(0, 49999),
-    sb.from('orders').select('*').order('date').range(0, 49999)]);
+    sb.from('orders').select('*').order('date').range(0, 49999),
+    sb.from('online_days').select('*').order('day').range(0, 9999)]);
   const err = [me,al,cs,sl,py,st,pr,rw,od].find(r=>r.error); if(err) throw err.error;
   CUST_ALIAS = al.data?.value || {};
   const S = Object.fromEntries(st.data.map(r=>[r.key, r.value]));
   db = {me: me.data?.value || {}, customers: cs.data.map(c=>({...c, opening:Number(c.opening)||0, items:c.items||[]})),
         slips: sl.data.map(x=>({...x, total:Number(x.total)})), pays: py.data.map(x=>({...x, amt:Number(x.amt)})),
         orders: od.data, rawPack: S.raw_pack || null, openingDate: S.opening_date || null, payAlias: S.pay_alias || {}, shipRules: S.ship_rules || {}, recipes: S.recipes || {}, prodAlias: S.prod_alias || {}, rawConv: S.raw_conv || {}, loss: Number(S.loss) || 1.09,
-        prods: pr.data.map(x=>({...x, kg:Number(x.kg)})), raws: rw.data.map(x=>({...x, qty:Number(x.qty), amt:Number(x.amt)||0}))};
+        prods: pr.data.map(x=>({...x, kg:Number(x.kg)})), raws: rw.data.map(x=>({...x, qty:Number(x.qty), amt:Number(x.amt)||0})),
+        onlineDays: ol.error ? [] : (ol.data||[])};   // 취합기가 올리는 온라인 하루 요약(없어도 장부는 돈다)
 }
 async function must(q){ const r = await q; if(r.error){ alert('저장 실패: '+r.error.message); throw r.error; } return r.data; }
 const cust = code => db.customers.find(c=>c.code===code);
@@ -589,12 +624,85 @@ $('s-save').onclick = async ()=>{
   }finally{ customerWriteLocks.delete(savingCustomer.code); }
   }
   try{ printSlip(slip); }catch(error){ alert('명세서는 저장됐지만 인쇄 화면을 열지 못했습니다. 다시 저장하지 말고 저장된 명세서에서 인쇄하세요.'); }
+  if(isCourier(savingCustomer.code)){ courierFill(slip); drawCourier(); }
   if(cur===savingCustomer && inputSnapshot===JSON.stringify([lines,...['s-cust','s-date','s-memo','s-kakao'].map(id=>$(id).value)])){
     lines=[]; shipManual=false; $('s-memo').value=''; $('s-kakao').value=''; $('s-readmsg').textContent=''; showOutOrder();
   } else alert('앞서 요청한 명세서는 저장됐습니다. 대기 중 바꾼 입력은 유지했습니다. 다음 저장 전 내용을 확인하세요.');
   } finally{ $('s-save').disabled=false; }
   setCust(); drawLines();
 };
+
+/* ── 송장: 택배 거래처 명세서 → 주문취합 PC 추가주문표 한 줄 (도우미 127.0.0.1:8765) ── */
+// 도우미는 주문취합 PC 「신아 납품 처리기」 아이콘이 켠다. 다른 PC에서는 넣기 대신 복사할 글을 보여 준다.
+const HELPER='http://127.0.0.1:8765';
+const COURIER_TAG='[송장]';
+const isCourier = code => { const r=(db.shipRules||{})[code]; return !!r && r.type!=='없음'; };
+// 명세서 줄 → 현장 표기 「열무물10키로x3/포기10키로」. 택배비 줄은 뺀다.
+function courierItems(ls){
+  return (ls||[]).filter(l=>!/택배/.test(String(l.name??''))).map(l=>{
+    let n=String(l.name??'').replace(/\s/g,''); const sp=String(l.spec??'').replace(/\s/g,''), q=Number(l.qty)||0;
+    const hasW=/\d(?:\.\d+)?(?:키로|kg|KG|Kg|그람|g)/.test(n);
+    if(!hasW && /^(kg|KG|Kg|키로)$/.test(String(l.unit??'').trim())) return `${n}${q}키로`;   // 무게로 파는 줄: 수량 = kg
+    if(!hasW && /\d/.test(sp)) n+=sp.replace(/kg/i,'키로');
+    return q>1 ? `${n}x${q}` : n;
+  }).join('/');
+}
+let cvSent=new Set(), cvHelper=null;
+async function helperCall(path, body){
+  const ctl=new AbortController(), t=setTimeout(()=>ctl.abort(), 4000);
+  try{ const r=await fetch(HELPER+path, body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:ctl.signal}:{signal:ctl.signal});
+    return await r.json(); } finally{ clearTimeout(t); }
+}
+async function helperCheck(){
+  try{ const r=await helperCall('/today'); cvHelper=r['상태']==='ok'; cvSent=new Set(r['명세서']||[]); }
+  catch(e){ cvHelper=false; }
+  $('cv-helper').innerHTML = cvHelper?'· <span style="color:var(--ok,green)">주문취합 PC 도우미 연결됨</span>':'· 이 창은 도우미 없음(복사해서 넣기)';
+}
+function courierFill(s){
+  const c=cust(s.code)||{};
+  $('cv-slip').value=s.id; $('cv-name').value=c.legal||c.name||''; $('cv-tel').value=c.tel||''; $('cv-addr').value=c.addr||'';
+  $('cv-msg').value=''; $('cv-items').value=courierItems(s.lines); $('cv-savetel').checked=!c.tel;
+  $('cv-out').textContent=''; $('cv-card').scrollIntoView({behavior:'smooth',block:'start'});
+}
+// 오늘(거래일 칸 날짜) 택배 거래처 명세서 목록: 넣음/안 넣음
+async function drawCourier(){
+  await helperCheck();
+  const d=$('s-date').value||today();
+  const ss=db.slips.filter(s=>s.date===d && !s.canceled && isCourier(s.code));
+  $('cv-list').innerHTML = ss.length? ss.map(s=>`<span class="chip" data-cv="${s.id}">${(cust(s.code)?.name||s.code).replace(/</g,'&lt;')} ${s.id} ${cvSent.has(s.id)||String(s.memo||'').includes(COURIER_TAG)?'✔ 넣음':'· 안 넣음'}</span>`).join('') : '<span class="mut">이 날짜 택배 거래처 명세서 없음</span>';
+}
+$('cv-list').addEventListener('click', e=>{ const id=e.target.closest('[data-cv]')?.dataset.cv; const s=id&&db.slips.find(x=>x.id===id); if(s) courierFill(s); });
+$('cv-send').onclick = async ()=>{
+  if($('cv-send').disabled) return;
+  const slip=db.slips.find(x=>x.id===$('cv-slip').value);
+  if(!slip){ alert('먼저 명세서를 저장하거나 위 목록에서 고르세요.'); return; }
+  const body={'명세서':slip.id,'수취인':$('cv-name').value.trim(),'전화번호':$('cv-tel').value.trim(),'주소':$('cv-addr').value.trim(),
+    '주문내역':$('cv-items').value.trim(),'배송메시지':$('cv-msg').value.trim()};
+  const miss=['수취인','전화번호','주소','주문내역'].filter(k=>!body[k]);
+  if(miss.length){ alert('빈 칸을 채워 주세요: '+miss.join(', ')); return; }
+  const out=$('cv-out'); $('cv-send').disabled=true;
+  try{
+    let r; try{ r=await helperCall('/extra', body); }catch(e){ r=null; }
+    if(!r){
+      out.style.color='var(--wine)';
+      out.innerHTML='이 창에서는 주문취합 PC 도우미에 닿지 않습니다. 주문취합 PC의 「신아 납품 처리기」 아이콘으로 열어 다시 누르거나, 아래 글을 추가주문표 빈 줄에 붙여 넣으세요.<br><textarea rows="2" readonly style="width:100%">'
+        +['B2B',body['수취인'],body['전화번호'],'',body['주소'],body['주문내역'],body['배송메시지'],'명세서 '+slip.id,''].join('\t').replace(/</g,'&lt;')+'</textarea>';
+      return;
+    }
+    out.style.color=r['상태']==='err'?'var(--wine)':'inherit'; out.textContent=r['글']||'';
+    if(r['상태']==='err') return;
+    if(!String(slip.memo||'').includes(COURIER_TAG)){
+      const memo=((slip.memo||'')+' '+COURIER_TAG).trim();
+      try{ await must(sb.from('slips').update({memo}).eq('id',slip.id)); slip.memo=memo; }catch(e){ out.textContent+=' (명세서 메모에 [송장] 표시는 못 했습니다 — 추가주문표에는 들어갔습니다)'; }
+    }
+    const c=cust(slip.code);
+    if($('cv-savetel').checked && c && (c.tel!==body['전화번호'] || c.addr!==body['주소'])){
+      try{ await must(sb.from('customers').update({tel:body['전화번호'],addr:body['주소'],updated_at:new Date().toISOString()}).eq('code',c.code)); c.tel=body['전화번호']; c.addr=body['주소']; }
+      catch(e){ out.textContent+=' (거래처 전화·주소 저장은 실패했습니다)'; }
+    }
+  } finally{ $('cv-send').disabled=false; drawCourier(); }
+};
+$('s-date').addEventListener('change', ()=>drawCourier());
 
 /* ── 발주: 매출에 넣지 않고 따로 보관 → 「출고하기」로 명세서를 만들면 그때 매출이 된다 ── */
 let outOrder=null;   // 지금 명세서 화면에 불러와 출고 처리 중인 발주
@@ -687,6 +795,12 @@ function balance(code, until, beforeId){
 
 /* ── 매출장부 ── */
 ['sl-from','sl-to','sl-cust'].forEach(id=>$(id).addEventListener('input',renderSales));
+// 온라인(취합기) 하루 요약 합계 — 채널별 건수·금액을 기간으로 더한다
+function onlineSum(f, t){
+  const ds=(db.onlineDays||[]).filter(d=>(!f||d.day>=f)&&(!t||d.day<=t)); let orders=0, amount=0;
+  ds.forEach(d=>Object.values(d.channels||{}).forEach(v=>{ orders+=Number(v.orders)||0; amount+=Number(v.amount)||0; }));
+  return {days:ds.length, orders, amount};
+}
 function renderSales(){
   const f=$('sl-from').value, t=$('sl-to').value, c=findCust($('sl-cust').value);
   const rows = db.slips.filter(s=>(!f||s.date>=f)&&(!t||s.date<=t)&&(!c||s.code===c.code)).sort((a,b)=>b.date.localeCompare(a.date)||b.id.localeCompare(a.id));
@@ -694,6 +808,7 @@ function renderSales(){
     <td>${s.lines.map(l=>l.name+' '+l.qty).join(', ').slice(0,60)}</td><td class="n">${won(s.total)}</td>
     <td><button class="btn" data-p="${s.id}">다시 출력</button> ${s.canceled?'':`<button class="btn warn" data-c="${s.id}">취소</button>`}</td></tr>`).join('') || '<tr><td colspan="6" class="mut">아직 저장한 명세서가 없습니다.</td></tr>';
   const live = rows.filter(s=>!s.canceled); $('sl-total').textContent = won(live.reduce((a,s)=>a+s.total,0)); $('sl-cnt').textContent = `(${live.length}건)`;
+  const on=onlineSum(f,t); $('sl-online').textContent = c ? '' : on.days ? `온라인(취합기) 같은 기간: ${on.days}일 · ${won(on.orders)}건 · ${won(on.amount)}원 — 위 B2B 합계에는 들어 있지 않습니다.` : '온라인(취합기) 자료: 이 기간에 올라온 것이 없습니다.';
 }
 $('sl-table').onclick = async e=>{ const p=e.target.dataset.p, c=e.target.dataset.c;
   if(p) printSlip(db.slips.find(s=>s.id===p));
@@ -1080,6 +1195,86 @@ function recipeName(word){ const w=word.replace(/\s/g,''); if(db.recipes[w]) ret
   const hits=Object.keys(db.recipes).filter(k=>k.replace(/\s/g,'').includes(w)); return hits.length===1?hits[0]:null; }
 const usesText = us => us.map(u=>u.raw+' '+kg3(u.qty)).join(', ');
 let plines = [];
+
+/* ── 하루 마감: 그날 최종 생산량 = 온라인(취합기 품목별 합계) + B2B 명세서 + 기타 출고(샘플·재발송·지인출고 …) ── */
+const CLOSE_KINDS = ['샘플','재발송','지인출고','증정','시식','기타'];
+// 판매 이름 → 배합비 이름. 「매콤 배추김치」처럼 끝의 「김치」를 빼야 맞는 이름도 찾는다. 하나로 안 정해지면 null.
+function closeRecipe(name){
+  const w = String(name??'').replace(/\(수입\)|\(국산\)/g,'').replace(/\d+(?:\.\d+)?\s*(키로|킬로|kg|KG|Kg|그람|g)/g,'').replace(/\s/g,'');
+  if(!w) return null;
+  return recipeName(w) || (w.endsWith('김치') && w.length>3 ? recipeName(w.slice(0,-2)) : null);
+}
+// 취합기 「품목별 합계」 시트 붙여넣기(탭 구분): 품목 | 규격 | 수량 | 총 중량(kg). 머리줄·합계줄·빈 줄은 건너뛴다.
+function parseOnlineSheet(text){
+  const rows=[], bad=[];
+  String(text??'').split(/\r?\n/).forEach(line=>{
+    if(!line.trim()) return; const c=line.split('\t').map(x=>x.trim());
+    if(c[0]==='품목' || c[0]==='합계' || !c[0]) return;
+    const kg = c[3]!==undefined && c[3]!=='' ? parseRawQuantityKg(c[3]) : null;
+    if(kg===null || kg<0) bad.push(line.replace(/\t/g,' ')); else if(kg>0) rows.push({name:c[0], spec:c[1]||'', kg});
+  });
+  return {rows, bad};
+}
+// 기타 출고: 「샘플 포기 3」 「재발송 파김치 1.5kg」
+function parseEtcLines(text){
+  const rows=[], bad=[];
+  String(text??'').split(/\r?\n/).map(x=>x.trim()).filter(Boolean).forEach(line=>{
+    const m=line.match(/^(\S+)\s+(.+?)\s+(\d+(?:\.\d+)?)\s*(?:kg|KG|키로|킬로)?$/);
+    const kind = m && CLOSE_KINDS.find(k=>m[1]===k || (k==='지인출고' && m[1]==='지인'));
+    if(!m || !kind) bad.push(line); else rows.push({kind, name:m[2], kg:Number(m[3])});
+  });
+  return {rows, bad};
+}
+// 그날 B2B 명세서(취소 제외)의 품목 kg. 택배비 줄은 빼고, 무게를 못 읽는 줄은 따로 알린다.
+function b2bRowsFor(date){
+  const rows=[], noKg=[];
+  db.slips.filter(s=>s.date===date && !s.canceled).forEach(s=>(s.lines||[]).forEach(l=>{
+    if(/택배/.test(l.name||'')) return;
+    const per=itemKg(l), qty=Number(l.qty)||0; if(!qty) return;
+    if(per===null) noKg.push(`${l.name}${l.spec?' '+l.spec:''} ×${qty}`); else rows.push({name:l.name, spec:l.spec||'', kg:per*qty});
+  }));
+  return {rows, noKg};
+}
+// 세 출처를 배합비 품목별로 합친다. 수입(사입)·배합비 없음은 생산에서 빼고 목록으로 돌려준다.
+function closeTotals(online, b2b, etc){
+  const by={}, imported=[], noRecipe=[];
+  const add=(src, r)=>{
+    const label=`${r.name}${r.spec?' '+r.spec:''}`;
+    if(/\(수입\)/.test(r.name)) return imported.push(`${label} ${kg3(r.kg)}kg`);
+    const p=closeRecipe(r.name); if(!p) return noRecipe.push(`${label} ${kg3(r.kg)}kg`);
+    const t=by[p] ||= {product:p, kg:0, src:{}}; t.kg+=r.kg; t.src[src]=(t.src[src]||0)+r.kg;
+  };
+  online.forEach(r=>add('온라인',r)); b2b.forEach(r=>add('B2B',r)); etc.forEach(r=>add(r.kind,r));
+  const lines=Object.values(by).map(t=>({...t, kg:Math.round(t.kg*1000)/1000})).sort((a,b)=>b.kg-a.kg);
+  return {lines, imported, noRecipe};
+}
+// 취합기가 online_days 에 올린 그날 품목을 ① 칸에 「품목 규격 수량 kg」 탭 글로 채운다(붙여넣기와 같은 길로 읽게)
+function onlineDayText(day){
+  const d=(db.onlineDays||[]).find(x=>x.day===day); if(!d) return null;
+  const TAB=String.fromCharCode(9), NL=String.fromCharCode(10);
+  return [['품목','규격','수량','총 kg'].join(TAB), ...(d.items||[]).map(i=>[i.name, i.spec||'', i.qty??'', i.kg??''].join(TAB))].join(NL);
+}
+$('pc-cloud').onclick = ()=>{ const day=$('pr-date').value||today(), t=onlineDayText(day);
+  if(t===null) return $('pc-cloud-msg').textContent = `${day} 온라인 자료가 아직 올라오지 않았습니다(취합기 출고기록 뒤 올라옴). 엑셀에서 복사해 붙여넣어도 됩니다.`;
+  $('pc-online').value=t; const d=db.onlineDays.find(x=>x.day===day);
+  $('pc-cloud-msg').textContent = `${day} 자료 ${d.items.length}줄을 채웠습니다(올린 시각 ${String(d.updated_at||'').slice(0,16).replace('T',' ')}).`; };
+const srcText = src => '마감: '+Object.entries(src).filter(([k])=>k!=='수정').map(([k,v])=>`${k} ${kg3(v)}`).join(' · ')+(src['수정']?' (kg 직접 수정)':'');
+$('pc-fill').onclick = ()=>{
+  const d=$('pr-date').value||today();
+  const on=parseOnlineSheet($('pc-online').value), et=parseEtcLines($('pc-etc').value), bb=b2bRowsFor(d);
+  if(on.bad.length || et.bad.length) return alert('못 읽은 줄이 있습니다. 고친 뒤 다시 누르세요.\n\n'+[...on.bad.map(x=>'온라인: '+x), ...et.bad.map(x=>'기타: '+x)].join('\n'));
+  if(plines.length && !confirm('아래 생산 표에 있는 줄을 지우고 마감 합계로 바꿀까요?')) return;
+  const r=closeTotals(on.rows, bb.rows, et.rows);
+  plines=r.lines.map(l=>({product:l.product, kg:l.kg, src:l.src}));
+  const done=db.prods.filter(p=>p.date===d && !p.canceled && p.source==='마감');
+  $('pc-body').innerHTML = `<p>${d} 마감: 생산 <b>${plines.length}</b>품목, 합계 <b>${kg3(plines.reduce((a,l)=>a+l.kg,0))}</b> kg
+      (온라인 ${on.rows.length}줄 · B2B 명세서 ${bb.rows.length}줄 · 기타 ${et.rows.length}줄). 아래 표에서 확인하고 「생산 저장」을 누르세요.</p>`
+    + (done.length?`<p style="color:var(--wine)"><b>이 날짜에 이미 마감 생산 ${done.length}건이 저장돼 있습니다.</b> 다시 저장하면 두 번 차감됩니다 — 생산일지에서 먼저 취소하세요.</p>`:'')
+    + (r.imported.length?`<p class="mut">수입(사입)이라 생산에서 뺀 것: ${customerEscape(r.imported.join(', '))}</p>`:'')
+    + (r.noRecipe.length?`<p style="color:var(--wine)">배합비가 없어 뺀 것(생산품이면 아래 표에 직접 추가): ${customerEscape(r.noRecipe.join(', '))}</p>`:'')
+    + (bb.noKg.length?`<p style="color:var(--wine)">무게를 못 읽은 B2B 줄(직접 확인): ${customerEscape(bb.noKg.join(', '))}</p>`:'');
+  drawProd();
+};
 function drawProd(){
   $('pr-table').tBodies[0].innerHTML = plines.map((l,i)=>{ const us=l._kgText!==undefined?null:usesFor(l.product,l.kg);
     return `<tr><td><input data-pi="${i}" data-k="product" value="${String(l.product??'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;')}" list="recipelist" style="${us?'':'color:var(--wine);font-weight:bold'}"></td>
@@ -1102,8 +1297,9 @@ $('pr-table').addEventListener('change', e=>{ const i=e.target.dataset.pi, k=e.t
   if(k==='kg'){
     const kg=e.target.value.trim()===''?0:parseRawQuantityKg(e.target.value);
     plines[i].kg=kg;
+    if(plines[i].src) plines[i].src['수정']=1;
     if(kg===null) plines[i]._kgText=e.target.value; else delete plines[i]._kgText;
-  } else plines[i][k]=recipeName(e.target.value)||e.target.value;
+  } else { plines[i][k]=recipeName(e.target.value)||e.target.value; if(plines[i].src) plines[i].src['수정']=1; }
   drawProd(); });
 $('pr-table').addEventListener('click', e=>{ const d=e.target.dataset.pdel; if(d===undefined) return; plines.splice(d,1); drawProd(); });
 $('pr-save').onclick = async ()=>{
@@ -1113,8 +1309,10 @@ $('pr-save').onclick = async ()=>{
   const ls = plines; if(!ls.length) return alert('생산 품목을 넣으세요.');
   const bad = ls.filter(l=>!db.recipes[l.product]); if(bad.length) return alert('배합비가 없는 품목이 있습니다: '+bad.map(l=>l.product).join(', '));
   const inputSnapshot=JSON.stringify([plines,...['pr-date','pr-memo','pr-paste'].map(id=>$(id).value)]);
-  const d=$('pr-date').value||today(); $('pr-save').disabled=true;
-  try{ const rows = await must(sb.from('prods').insert(ls.map(l=>({date:d, product:l.product, kg:l.kg, loss:db.loss, uses:usesFor(l.product,l.kg), source:'직접', memo:$('pr-memo').value}))).select());
+  const d=$('pr-date').value||today();
+  if(ls.some(l=>l.src) && db.prods.some(p=>p.date===d && !p.canceled && p.source==='마감') && !confirm(`${d}에 이미 마감 생산이 저장돼 있습니다. 또 저장하면 원료가 두 번 차감됩니다.\n\n정말 추가로 저장할까요?`)) return;
+  $('pr-save').disabled=true;
+  try{ const rows = await must(sb.from('prods').insert(ls.map(l=>({date:d, product:l.product, kg:l.kg, loss:db.loss, uses:usesFor(l.product,l.kg), source:l.src?'마감':'직접', memo:[l.src?srcText(l.src):'', $('pr-memo').value].filter(Boolean).join(' / ')}))).select());
     rows.forEach(r=>db.prods.push({...r, kg:Number(r.kg)})); }
   finally{ $('pr-save').disabled=false; }
   if(inputSnapshot===JSON.stringify([plines,...['pr-date','pr-memo','pr-paste'].map(id=>$(id).value)])){
@@ -1152,7 +1350,16 @@ function rawOpeningLabel(events, raw, through, before=false){
   return events.some(e=>e.raw===raw&&e.k==='기초'&&(before?e.d<through:e.d<=through))
     ? '기초 기록 있음 · 실재고 미확인' : '기초 미등록 · 실재고 미확인';
 }
+// 주간 실사(대표 11/15: 배합비로 자동 차감, 일주일에 한 번 실사로 「조정」) — 마지막 조정일과 그 뒤 생산 차감 건수를 알린다
+function auditNote(now){
+  const adj=db.raws.filter(r=>!r.canceled && r.kind==='조정').map(r=>r.date).sort().pop()||null;
+  const since=db.prods.filter(p=>!p.canceled && (!adj || p.date>adj)).length;
+  if(!adj) return {warn:since>0, text:since?`아직 실사 조정 기록이 없습니다. 생산 차감 ${since}건이 실사로 맞춰진 적 없음 — 일주일에 한 번 원료를 세어 「조정」으로 차이를 넣으세요.`:''};
+  const days=Math.round((Date.parse(now)-Date.parse(adj))/86400000);
+  return {warn:days>7, text:`마지막 실사 조정 ${adj} (${days}일 전) · 그 뒤 생산 차감 ${since}건`+(days>7?' — 일주일이 지났습니다. 원료를 세어 「조정」으로 맞추세요.':'')};
+}
 function renderRaw(){
+  { const a=auditNote(today()); $('rb-audit').textContent=a.text; $('rb-audit').style.color=a.warn?'var(--wine)':''; $('rb-audit').style.fontWeight=a.warn?'bold':''; }
   $('rawlist').innerHTML = rawNames().map(k=>`<option value="${k}">`).join('');
   const f=$('rb-from').value||'0000', t=$('rb-to').value||'9999', one=$('rb-raw').value.trim(), ev=rawEvents();
   if(one){ let bal=ev.filter(e=>e.raw===one&&e.d<f).reduce((a,e)=>a+e.q,0);
