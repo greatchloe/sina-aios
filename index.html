@@ -595,7 +595,7 @@ $('s-save').onclick = async ()=>{
   const ls=checkedLines(); if(!ls) return;
   const dup=sameDaySlips(db.slips, cur.code, $('s-date').value||today(), ls);
   if(dup.identical.length && !confirm(`같은 날 ${cur.name}에 품목·수량·단가가 똑같은 명세서가 이미 있습니다 (번호 ${dup.identical.map(s=>s.id).join(', ')}).\n\n중복 저장일 가능성이 큽니다. 정말 한 번 더 보낸 것이 맞을 때만 「확인」을 누르세요.`)) return;
-  if(!dup.identical.length && dup.same.length && !confirm(`같은 날 ${cur.name} 명세서가 이미 ${dup.same.length}건 있습니다 (합계 ${won(dup.same.reduce((a,s)=>a+s.total,0))}원).\n\n추가 발주가 맞으면 「확인」을 누르세요.`)) return;
+  if(!dup.identical.length && dup.same.length && !confirm(`같은 날 ${cur.name} 명세서가 이미 ${dup.same.length}건 있습니다 (합계 ${won(dup.same.reduce((a,s)=>a+s.total,0))}원).${sameDayShipNote(cur, dup.same, ls)}\n\n추가 발주가 맞으면 「확인」을 누르세요.`)) return;
   const recheckRule=shipRuleFor(cur);
   if(recheckRule?.recheck){
     const fee=ls.filter(l=>/택배/.test(String(l.name??''))).reduce((a,l)=>a+Math.round(l.qty*l.price),0);
@@ -655,6 +655,16 @@ async function clearRecheck(code){
     const {recheck,...rest}=all[code]; all[code]={...rest, updated:today()};
     await must(sb.from('settings').upsert({key:'ship_rules',value:all,updated_at:new Date().toISOString()})); db.shipRules=all;
   }catch(e){ alert('명세서는 저장됐습니다. 다만 「다시 확인」 표시를 지우지 못해 다음에도 확인 창이 뜰 수 있습니다.'); }
+}
+// 같은 날 두 번째 명세서: 100kg면제형이면 앞 명세서와 합친 kg·택배비를 알려 준다(대표 11/16). 자동으로 고치지는 않는다.
+function freeKg(ls){ return (ls||[]).reduce((a,l)=>{ if(/택배/.test(String(l.name??''))) return a; const g=shipGroup(l.name); if(g!=='A'&&g!=='X') return a;
+  const k=shipKg(l.name,l.spec); return a+(k===null?10:k)*(Number(l.qty)||0); },0); }
+function sameDayShipNote(c, same, ls){
+  const rule=shipRuleFor(c); if(rule?.type!=='100kg면제형') return '';
+  const feeOf=xs=>(xs||[]).filter(l=>/택배/.test(String(l.name??''))).reduce((a,l)=>a+Math.round((Number(l.qty)||0)*(Number(l.price)||0)),0);
+  const before=same.reduce((a,s)=>a+freeKg(s.lines),0), now=freeKg(ls), fee=feeOf(ls), paid=same.reduce((a,s)=>a+feeOf(s.lines),0);
+  return `\n\n[택배비] 앞 명세서 ${kg3(before)}kg(택배비 ${won(paid)}원) + 이번 ${kg3(now)}kg = 합계 ${kg3(before+now)}kg.\n이번 명세서 택배비 ${won(fee)}원은 이 명세서만 따로 계산한 것입니다.`
+    + (before+now>=100 && (fee>0||paid>0) ? '\n⚠ 합치면 100kg 이상입니다. 같이 보내는 것이면 택배비 줄을 고친 뒤 저장하세요(장아찌·오말랭이 몫은 그대로).' : '');
 }
 /* ── 송장: 택배 거래처 명세서 → 주문취합 PC 추가주문표 한 줄 (도우미 127.0.0.1:8765) ── */
 // 도우미는 주문취합 PC 「신아 납품 처리기」 아이콘이 켠다. 다른 PC에서는 넣기 대신 복사할 글을 보여 준다.
