@@ -39,7 +39,8 @@ td input{padding:4px 6px}
 }
 .slip{border:2px solid #000;padding:6px 8px;height:136mm;font-size:11px;margin-bottom:6mm;page-break-inside:avoid;display:flex;flex-direction:column}
 .slip h1{text-align:center;font-size:20px;letter-spacing:10px;margin:2px 0 4px}
-.slip .who{display:flex;gap:6px}.slip .who table{border:1px solid #000}
+.slip .who{display:flex;gap:6px}.slip .who table{border:1px solid #000;table-layout:fixed;width:50%;border-collapse:collapse}
+.slip .who th{width:68px}.slip .who td{word-break:break-all;overflow:hidden}
 .slip td,.slip th{border:1px solid #000;padding:2px 4px;white-space:normal;font-size:11px}
 .slip th{background:#f0f0f0}
 .slip .items{flex:1}
@@ -698,6 +699,18 @@ function courierFill(s){
   $('cv-slip').value=s.id; $('cv-name').value=c.legal||c.name||''; $('cv-tel').value=c.tel||''; $('cv-addr').value=c.addr||'';
   $('cv-msg').value=''; $('cv-items').value=courierItems(s.lines); $('cv-savetel').checked=!c.tel;
   $('cv-out').textContent=''; $('cv-card').scrollIntoView({behavior:'smooth',block:'start'});
+  shiptoFill(s.id, c.legal||c.name||'');
+}
+// 한 번 송장이 나간 곳은 주문취합 PC 도우미가 받는 사람·전화·주소를 기억한다(대표 11/16: 「한번 나간 곳은 기억해」).
+async function shiptoFill(slipId, name){
+  if(!name) return;
+  await helperCheck();   // 도우미를 나중에 켰을 수도 있으니 매번 다시 확인
+  if(!cvHelper) return;
+  try{ const r=await helperCall('/shipto?name='+encodeURIComponent(name));
+    if($('cv-slip').value!==slipId || !r || r['상태']!=='ok' || !r['수취인']) return;   // 그사이 다른 명세서를 골랐으면 건드리지 않음
+    $('cv-name').value=r['수취인']; if(r['전화번호']) $('cv-tel').value=r['전화번호']; if(r['주소']) $('cv-addr').value=r['주소'];
+    $('cv-out').style.color='inherit'; $('cv-out').textContent='지난번 송장 받는 곳을 불러왔습니다.';
+  }catch(e){}
 }
 // 오늘(거래일 칸 날짜) 택배 거래처 명세서 목록: 넣음/안 넣음
 async function drawCourier(){
@@ -713,7 +726,14 @@ $('cv-send').onclick = async ()=>{
   if(!slip){ alert('먼저 명세서를 저장하거나 위 목록에서 고르세요.'); return; }
   const body={'명세서':slip.id,'수취인':$('cv-name').value.trim(),'전화번호':$('cv-tel').value.trim(),'주소':$('cv-addr').value.trim(),
     '주문내역':$('cv-items').value.trim(),'배송메시지':$('cv-msg').value.trim()};
-  const miss=['수취인','전화번호','주소','주문내역'].filter(k=>!body[k]);
+  // 주문취합 PC가 송장 뒤 명세서 PDF를 만들 수 있게 명세서 내용도 함께 넘긴다(그 PC는 장부 DB를 직접 못 읽음, 11/16). 이 PC 안 도우미로만 간다.
+  const sc=cust(slip.code)||{};
+  body['명세서데이터']={ slip:{id:slip.id,date:slip.date,code:slip.code,memo:slip.memo||'',lines:slip.lines,total:slip.total},
+    cust:{code:sc.code,name:sc.name,legal:sc.legal,ceo:sc.ceo,bizno:sc.bizno,addr:sc.addr,tel:sc.tel}, me:db.me,
+    rule:(db.shipRules||{})[slip.code]||{}, prev:balance(slip.code,slip.date,slip.id), month:monthPart(slip.code,slip.date,slip.id) };
+  // 도우미가 연결돼 있으면 비어 있는 받는 사람·전화·주소는 도우미가 기억으로 채운다(모르면 도우미가 「빈 칸」 오류를 돌려줌).
+  if(!body['수취인']||!body['전화번호']||!body['주소']) await helperCheck();
+  const miss=(cvHelper?['주문내역']:['수취인','전화번호','주소','주문내역']).filter(k=>!body[k]);
   if(miss.length){ alert('빈 칸을 채워 주세요: '+miss.join(', ')); return; }
   const out=$('cv-out'); $('cv-send').disabled=true;
   try{
@@ -816,7 +836,7 @@ function slipHTML(s, copy){
   <div style="margin-top:3px;display:flex;justify-content:space-between"><span>${slipBalanceText(s)}</span><span>${me.bank||''}</span></div>
   ${s.memo?`<div>메모: ${s.memo}</div>`:''}<div style="text-align:right;margin-top:2px">인수자 __________ (인)</div></div>`;
 }
-// 명세서 아래 잔액 줄. 월말에 한 달 치를 받는 거래처(택배비 기준 monthly, 대표 11/16: 서관)는 「이번 달」만 크게 보여 주고
+// 명세서 아래 잔액 줄. 월말에 한 달 치를 받는 거래처(택배비 기준 monthly, 대표 11/16)는 「이번 달」만 크게 보여 주고
 // 지난달까지 남은 미수는 작게 따로 적는다. 장부의 실제 미수금(balance)은 바꾸지 않는다.
 function monthPart(code, date, id){
   const r=(db.shipRules||{})[code]||{}, ym=String(date).slice(0,7);
@@ -828,8 +848,8 @@ function slipBalanceText(s){
   const prev=balance(s.code,s.date,s.id);
   if(!(db.shipRules||{})[s.code]?.monthly) return `전 잔액 ${won(prev)} · 금일 ${won(s.total)} · 현재 잔액 ${won(prev+s.total)}`;
   const mon=Number(String(s.date).slice(5,7)), m=monthPart(s.code,s.date,s.id), carry=prev-m;
-  return `${mon}월 전잔액 ${won(m)} · 금일 ${won(s.total)} · ${mon}월 누계 ${won(m+s.total)}`
-    + (carry?` <small style="font-size:9px">(지난달까지 미수 ${won(carry)} 별도)</small>`:'');
+  // 지난달까지 미수(carry)는 명세서에 적지 않는다(대표 11/16) — 실제 미수금은 장부 미수금 현황에만.
+  return `${mon}월 전잔액 ${won(m)} · 금일 ${won(s.total)} · ${mon}월 누계 ${won(m+s.total)}`;
 }
 function printSlip(s){ $('print').innerHTML = slipHTML(s,'공급받는자용') + slipHTML(s,'공급자 보관용'); setTimeout(()=>window.print(),50); }
 
