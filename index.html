@@ -482,7 +482,7 @@ $('s-read').onclick = ()=>{
 // 기준은 2026-07~10 전표 459건에서 찾은 것(452건 일치). 근거: 업무도구/결과/거래처별_택배비_기준_20261105.xlsx
 const SHIP_TYPES = {
   '박스마다': '무게와 상관없이 박스마다 부과. 10kg 이상은 1개당 1박스, 10kg 미만은 10kg 단위로 묶어 1박스',
-  '100kg면제형': '무채·얼갈이·열무물 합계 100kg 이상이면 이 3품목 무료, 미만이면 개당 부과. 장아찌는 2개당 1건(올림), 오말랭이 20kg는 개당 1건(별도 단가), 김치양념은 100kg 미만일 때 3개당 1건',
+  '100kg면제형': '김치·무채·얼갈이·열무물 합계 100kg 이상이면 무료, 미만이면 10kg 한 개(작은 것은 10kg 묶음)마다 부과. 장아찌는 2개당 1건(올림), 오말랭이 20kg는 개당 1건(별도 단가), 김치양념은 100kg 미만일 때 3개당 1건',
   '장아찌만': '장아찌 개수만큼 부과(다른 품목은 무료)',
   '없음': '택배비를 받지 않음'};
 function shipGroup(name){
@@ -506,8 +506,12 @@ function shipFee(rule, ls){
   items.forEach(l=>{ c[shipGroup(l.name)]+=Number(l.qty)||0; });
   const out=[], add=(qty,p,spec='')=>{ if(qty>0) out.push({spec,qty,price:p}); };
   if(rule.type==='100kg면제형'){
-    const under=c.A*10<100;
-    add((under?c.A:0)+Math.ceil(c.J/2)+(under?Math.ceil(c.Y/3):0), price);
+    // 100kg는 무채·얼갈이·열무물(A) + 그 밖의 김치(X)를 합쳐 센다(대표 11/16: 「김치 무채 얼갈이 포함해서」).
+    let xKg=0, xBox=0, xSmall=0;
+    items.forEach(l=>{ if(shipGroup(l.name)!=='X') return; const k=shipKg(l.name,l.spec), q=Number(l.qty)||0;
+      if(k===null){ xBox+=q; xKg+=10*q; } else { xKg+=k*q; if(k>=10) xBox+=q; else xSmall+=k*q; } });
+    const under=c.A*10+xKg<100;
+    add((under?c.A+xBox+Math.ceil(xSmall/10-1e-9):0)+Math.ceil(c.J/2)+(under?Math.ceil(c.Y/3):0), price);
     add(c.O, Number(rule.omPrice)||price, '오말랭이 20kg');
   } else if(rule.type==='박스마다'){
     let boxes=0, small=0;
@@ -636,7 +640,8 @@ $('s-save').onclick = async ()=>{
 // 도우미는 주문취합 PC 「신아 납품 처리기」 아이콘이 켠다. 다른 PC에서는 넣기 대신 복사할 글을 보여 준다.
 const HELPER='http://127.0.0.1:8765';
 const COURIER_TAG='[송장]';
-const isCourier = code => { const r=(db.shipRules||{})[code]; return !!r && r.type!=='없음'; };
+// 택배로 나가는 거래처 = 택배비 기준의 「택배(송장 만들기)」 표시(courier). 택배비 기준과 따로 본다(직배인데 운임을 받는 곳이 있음).
+const isCourier = code => !!(db.shipRules||{})[code]?.courier;
 // 명세서 줄 → 현장 표기 「열무물10키로x3/포기10키로」. 택배비 줄은 뺀다.
 function courierItems(ls){
   return (ls||[]).filter(l=>!/택배/.test(String(l.name??''))).map(l=>{
@@ -1161,6 +1166,7 @@ function renderShipRule(c){
     <div style="max-width:200px"><label>기준</label><select id="cs-type"><option value="">미등록(자동 계산 안 함)</option>${Object.keys(SHIP_TYPES).map(k=>`<option ${r.type===k?'selected':''}>${k}</option>`).join('')}</select></div>
     <div style="max-width:140px"><label>1건 단가(원)</label><input id="cs-price" inputmode="numeric" value="${customerEscape(r.price)}"></div>
     <div style="max-width:160px"><label>오말랭이 20kg 단가(100kg면제형)</label><input id="cs-om" inputmode="numeric" value="${customerEscape(r.omPrice)}"></div>
+    <div style="max-width:180px"><label>출고 방식</label><label style="display:inline;font-weight:normal"><input type="checkbox" id="cs-courier" style="width:auto" ${r.courier?'checked':''}> 택배(송장 만들기)</label></div>
     <div style="flex:0"><button class="btn pri" id="cs-save">기준 저장</button></div></div>
     <p class="mut" id="cs-desc">${SHIP_TYPES[r.type]||'기준을 고르면 명세서 작성 때 택배비 줄을 자동으로 넣습니다.'}</p>`;
   $('cs-type').onchange=()=>{ $('cs-desc').textContent=SHIP_TYPES[$('cs-type').value]||'기준을 고르면 명세서 작성 때 택배비 줄을 자동으로 넣습니다.'; };
@@ -1175,7 +1181,7 @@ function renderShipRule(c){
       const fresh=await must(sb.from('settings').select('value').eq('key','ship_rules').maybeSingle());
       const all={...(fresh?.value||{})};
       if(!type) delete all[c.code];
-      else all[c.code]={type, price:type==='없음'?0:price, ...(type==='100kg면제형'&&om?{omPrice:om}:{}), updated:today()};
+      else all[c.code]={type, price:type==='없음'?0:price, ...(type==='100kg면제형'&&om?{omPrice:om}:{}), ...($('cs-courier').checked?{courier:true}:{}), updated:today()};
       await must(sb.from('settings').upsert({key:'ship_rules',value:all,updated_at:new Date().toISOString()}));
       db.shipRules=all; alert(`${c.name} 택배비 기준을 저장했습니다.`);
     } finally{ $('cs-save').disabled=false; }
