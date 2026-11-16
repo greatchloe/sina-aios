@@ -535,7 +535,7 @@ function shipNote(){
   const rule=shipRuleFor(cur); if(!cur) return '';
   if(!rule) return '<span class="mut">이 거래처는 택배비 기준이 등록되지 않아 자동 계산하지 않습니다(거래처·단가 화면에서 등록).</span>';
   const fee=shipFee(rule, lines), want=fee.reduce((a,f)=>a+f.qty*f.price,0);
-  const label=`택배비 기준 「${rule.type}」${rule.type==='없음'?'':' '+won(rule.price)+'원'}`;
+  const label=(rule.recheck?`<b style="color:var(--wine)">⚠ 택배비·출고 방식 다시 확인할 거래처(${String(rule.recheck).replace(/</g,'&lt;')}) — 저장할 때 확인 창이 뜹니다.</b> `:'')+`택배비 기준 「${rule.type}」${rule.type==='없음'?'':' '+won(rule.price)+'원'}`;
   const manual=lines.filter(l=>!l._auto && /택배/.test(String(l.name??''))), have=manual.reduce((a,l)=>a+(Number(l.qty)||0)*(Number(l.price)||0),0);
   if(shipManual || manual.length) return `<span style="color:${have===want?'var(--mut)':'var(--wine)'}">${label} · 직접 입력 ${won(have)}원 / 기준 계산 ${won(want)}원${have===want?'':' — 차이 확인'}</span>`;
   return `<span class="mut">${label} · 자동 ${fee.length?fee.map(f=>`${f.spec?f.spec+' ':''}${f.qty}건×${won(f.price)}`).join(', '):'0원'}</span>`;
@@ -596,6 +596,17 @@ $('s-save').onclick = async ()=>{
   const dup=sameDaySlips(db.slips, cur.code, $('s-date').value||today(), ls);
   if(dup.identical.length && !confirm(`같은 날 ${cur.name}에 품목·수량·단가가 똑같은 명세서가 이미 있습니다 (번호 ${dup.identical.map(s=>s.id).join(', ')}).\n\n중복 저장일 가능성이 큽니다. 정말 한 번 더 보낸 것이 맞을 때만 「확인」을 누르세요.`)) return;
   if(!dup.identical.length && dup.same.length && !confirm(`같은 날 ${cur.name} 명세서가 이미 ${dup.same.length}건 있습니다 (합계 ${won(dup.same.reduce((a,s)=>a+s.total,0))}원).\n\n추가 발주가 맞으면 「확인」을 누르세요.`)) return;
+  const recheckRule=shipRuleFor(cur);
+  if(recheckRule?.recheck){
+    const fee=ls.filter(l=>/택배/.test(String(l.name??''))).reduce((a,l)=>a+Math.round(l.qty*l.price),0);
+    if(!confirm(`${cur.name}: 택배비·출고 방식을 다시 확인할 거래처입니다.
+(${recheckRule.recheck})
+
+지금 기준: 「${recheckRule.type}」 ${won(recheckRule.price)}원 · 이 명세서 택배비 합계 ${won(fee)}원
+
+맞으면 「확인」을 누르세요. 확인하면 다음부터 이 창은 뜨지 않습니다.
+고칠 것이 있으면 「취소」를 누르고 거래처·단가 화면에서 택배비 기준을 고친 뒤 다시 저장하세요.`)) return;
+  }
   const savingCustomer=cur;
   const inputSnapshot=JSON.stringify([lines,...['s-cust','s-date','s-memo','s-kakao'].map(id=>$(id).value)]);
   const d=$('s-date').value||today(); $('s-save').disabled=true;
@@ -629,6 +640,7 @@ $('s-save').onclick = async ()=>{
   }
   try{ printSlip(slip); }catch(error){ alert('명세서는 저장됐지만 인쇄 화면을 열지 못했습니다. 다시 저장하지 말고 저장된 명세서에서 인쇄하세요.'); }
   if(isCourier(savingCustomer.code)){ courierFill(slip); drawCourier(); }
+  if(recheckRule?.recheck) clearRecheck(savingCustomer.code);
   if(cur===savingCustomer && inputSnapshot===JSON.stringify([lines,...['s-cust','s-date','s-memo','s-kakao'].map(id=>$(id).value)])){
     lines=[]; shipManual=false; $('s-memo').value=''; $('s-kakao').value=''; $('s-readmsg').textContent=''; showOutOrder();
   } else alert('앞서 요청한 명세서는 저장됐습니다. 대기 중 바꾼 입력은 유지했습니다. 다음 저장 전 내용을 확인하세요.');
@@ -636,6 +648,14 @@ $('s-save').onclick = async ()=>{
   setCust(); drawLines();
 };
 
+// 「다시 확인」 표시를 지운다. 다른 컴퓨터의 기준 변경을 덮지 않도록 최신 값을 읽어 이 거래처의 recheck 만 뺀다.
+async function clearRecheck(code){
+  try{ const fresh=await must(sb.from('settings').select('value').eq('key','ship_rules').maybeSingle());
+    const all={...(fresh?.value||{})}; if(!all[code]?.recheck) return;
+    const {recheck,...rest}=all[code]; all[code]={...rest, updated:today()};
+    await must(sb.from('settings').upsert({key:'ship_rules',value:all,updated_at:new Date().toISOString()})); db.shipRules=all;
+  }catch(e){ alert('명세서는 저장됐습니다. 다만 「다시 확인」 표시를 지우지 못해 다음에도 확인 창이 뜰 수 있습니다.'); }
+}
 /* ── 송장: 택배 거래처 명세서 → 주문취합 PC 추가주문표 한 줄 (도우미 127.0.0.1:8765) ── */
 // 도우미는 주문취합 PC 「신아 납품 처리기」 아이콘이 켠다. 다른 PC에서는 넣기 대신 복사할 글을 보여 준다.
 const HELPER='http://127.0.0.1:8765';
