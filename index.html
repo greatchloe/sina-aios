@@ -813,8 +813,23 @@ function slipHTML(s, copy){
   <table class="items" style="margin-top:4px"><tr><th style="width:24px">No</th><th>품명</th><th>규격</th><th>단위</th><th>수량</th><th>단가</th><th>금액</th></tr>
   ${rows.map((l,i)=>l?`<tr><td>${i+1}</td><td>${l.name}</td><td>${l.spec}</td><td>${l.unit}</td><td style="text-align:right">${l.qty}</td><td style="text-align:right">${won(l.price)}</td><td style="text-align:right">${won(l.amt)}</td></tr>`:'<tr><td>&nbsp;</td><td></td><td></td><td></td><td></td><td></td><td></td></tr>').join('')}
   <tr><th colspan="6">합 계</th><th style="text-align:right">${won(s.total)}</th></tr></table>
-  <div style="margin-top:3px;display:flex;justify-content:space-between"><span>전 잔액 ${won(balance(s.code,s.date,s.id))} · 금일 ${won(s.total)} · 현재 잔액 ${won(balance(s.code,s.date,s.id)+s.total)}</span><span>${me.bank||''}</span></div>
+  <div style="margin-top:3px;display:flex;justify-content:space-between"><span>${slipBalanceText(s)}</span><span>${me.bank||''}</span></div>
   ${s.memo?`<div>메모: ${s.memo}</div>`:''}<div style="text-align:right;margin-top:2px">인수자 __________ (인)</div></div>`;
+}
+// 명세서 아래 잔액 줄. 월말에 한 달 치를 받는 거래처(택배비 기준 monthly, 대표 11/16: 서관)는 「이번 달」만 크게 보여 주고
+// 지난달까지 남은 미수는 작게 따로 적는다. 장부의 실제 미수금(balance)은 바꾸지 않는다.
+function monthPart(code, date, id){
+  const r=(db.shipRules||{})[code]||{}, ym=String(date).slice(0,7);
+  let m=Number((r.monthOpen||{})[ym])||0;   // 전환 기준일 기초잔액 가운데 그 달 몫(예: 11/1~15 매출)
+  db.slips.forEach(x=>{ if(x.code===code && !x.canceled && afterOpening(x.date) && String(x.date).slice(0,7)===ym && (x.date<date || (x.date===date && x.id<id))) m+=x.total; });
+  return m;
+}
+function slipBalanceText(s){
+  const prev=balance(s.code,s.date,s.id);
+  if(!(db.shipRules||{})[s.code]?.monthly) return `전 잔액 ${won(prev)} · 금일 ${won(s.total)} · 현재 잔액 ${won(prev+s.total)}`;
+  const mon=Number(String(s.date).slice(5,7)), m=monthPart(s.code,s.date,s.id), carry=prev-m;
+  return `${mon}월 전잔액 ${won(m)} · 금일 ${won(s.total)} · ${mon}월 누계 ${won(m+s.total)}`
+    + (carry?` <small style="font-size:9px">(지난달까지 미수 ${won(carry)} 별도)</small>`:'');
 }
 function printSlip(s){ $('print').innerHTML = slipHTML(s,'공급받는자용') + slipHTML(s,'공급자 보관용'); setTimeout(()=>window.print(),50); }
 
@@ -1211,7 +1226,7 @@ function renderShipRule(c){
       const fresh=await must(sb.from('settings').select('value').eq('key','ship_rules').maybeSingle());
       const all={...(fresh?.value||{})};
       if(!type) delete all[c.code];
-      else all[c.code]={type, price:type==='없음'?0:price, ...(type==='100kg면제형'&&om?{omPrice:om}:{}), ...($('cs-courier').checked?{courier:true}:{}), updated:today()};
+      else all[c.code]={type, price:type==='없음'?0:price, ...(type==='100kg면제형'&&om?{omPrice:om}:{}), ...($('cs-courier').checked?{courier:true}:{}), ...(all[c.code]?.monthly?{monthly:true, monthOpen:all[c.code].monthOpen||{}}:{}), updated:today()};
       await must(sb.from('settings').upsert({key:'ship_rules',value:all,updated_at:new Date().toISOString()}));
       db.shipRules=all; alert(`${c.name} 택배비 기준을 저장했습니다.`);
     } finally{ $('cs-save').disabled=false; }
