@@ -145,7 +145,7 @@ td input{padding:4px 6px}
       <div style="max-width:160px"><label>출고 예정일 시작</label><input type="date" id="o-from"></div>
       <div style="max-width:160px"><label>끝</label><input type="date" id="o-to"></div>
       <div><label>거래처</label><input id="o-cust" list="custlist" placeholder="전체"></div>
-      <div style="max-width:160px"><label>상태</label><select id="o-status"><option value="접수">출고 전(접수)</option><option value="출고">출고 완료</option><option value="취소">취소</option><option value="">전체</option></select></div>
+      <div style="max-width:160px"><label>상태</label><select id="o-status"><option value="접수">출고 전(접수)</option><option value="출고">출고 완료</option><option value="">전체</option></select></div>
     </div>
   </div>
   <div class="card"><div class="wrap"><table id="o-table"><thead><tr><th>출고 예정일</th><th>번호</th><th>거래처</th><th>품목</th><th class="n">금액</th><th>상태</th><th></th></tr></thead><tbody></tbody></table></div>
@@ -735,6 +735,9 @@ $('cv-send').onclick = async ()=>{
   if(!body['수취인']||!body['전화번호']||!body['주소']) await helperCheck();
   const miss=(cvHelper?['주문내역']:['수취인','전화번호','주소','주문내역']).filter(k=>!body[k]);
   if(miss.length){ alert('빈 칸을 채워 주세요: '+miss.join(', ')); return; }
+  // 같은 거래처·같은 날 이미 송장을 넣은 다른 명세서(취소한 것 포함)가 있으면 한 번 더 묻는다(11/16 송장 두 번 출력).
+  const twice=db.slips.filter(x=>x.id!==slip.id && x.code===slip.code && x.date===slip.date && (String(x.memo||'').includes(COURIER_TAG)||cvSent.has(x.id)));
+  if(twice.length && !confirm(`${sc.name||slip.code}는 ${slip.date}에 이미 송장을 넣었습니다 (명세서 ${twice.map(x=>x.id+(x.canceled?'·취소됨':'')).join(', ')}).\n\n또 넣으면 송장이 두 번 나갑니다. 정말 따로 보내는 택배일 때만 「확인」을 누르세요.`)) return;
   const out=$('cv-out'); $('cv-send').disabled=true;
   try{
     let r; try{ r=await helperCall('/extra', body); }catch(e){ r=null; }
@@ -789,7 +792,7 @@ $('s-order').onclick = async ()=>{
 ['o-from','o-to','o-cust','o-status'].forEach(id=>$(id).addEventListener('input',renderOrders));
 function orderRows(){
   const f=$('o-from').value, t=$('o-to').value, c=findCust($('o-cust').value), st=$('o-status').value;
-  return db.orders.filter(o=>(!f||(o.ship_date||o.date)>=f)&&(!t||(o.ship_date||o.date)<=t)&&(!c||o.code===c.code)&&(!st||orderState(o)===st))
+  return db.orders.filter(o=>!o.canceled && (!f||(o.ship_date||o.date)>=f)&&(!t||(o.ship_date||o.date)<=t)&&(!c||o.code===c.code)&&(!st||orderState(o)===st))
     .sort((a,b)=>(a.ship_date||a.date).localeCompare(b.ship_date||b.date)||a.id.localeCompare(b.id));
 }
 function renderOrders(){
@@ -811,9 +814,12 @@ $('o-table').onclick = async e=>{
     // 택배비 기준이 있는 거래처는 실제 출고량으로 다시 계산되도록 발주의 택배비 줄을 빼고 불러온다
     lines=(o.lines||[]).filter(l=>!(rule && /택배/.test(String(l.name??'')))).map(({amt,...l})=>({...l}));
     $('s-cust').value=c.code+' '+c.name; setCust();
-    outOrder=o; shipManual=false; $('s-date').value=today(); $('s-memo').value=o.memo||''; $('s-kakao').value=''; $('s-readmsg').textContent='';
+    // 나눠 보내는 남은 분량(우리 물량부족)은 택배비를 붙이지 않는다(대표 11/16). 발주 메모 「[택배비 없음]」 또는 「택배비 받지 않음」.
+    const noFee=/\[택배비 없음\]|택배비 받지 않음/.test(String(o.memo||''));
+    outOrder=o; shipManual=noFee; $('s-date').value=today(); $('s-memo').value=o.memo||''; $('s-kakao').value='';
+    $('s-readmsg').innerHTML=noFee?'<b style="color:var(--wine)">나눠 보내는 남은 분량이라 택배비를 붙이지 않습니다(발주 메모). 받아야 하면 택배비 줄을 직접 넣으세요.</b>':'';
     drawLines(); showOutOrder(); document.querySelector('#nav button[data-v="slip"]').click(); return; }
-  if(oc && confirm('이 발주를 취소할까요? (지우지 않고 「취소」로 남깁니다)')){
+  if(oc && confirm('이 발주를 지울까요? 발주 목록에서 빠집니다.')){
     const o=db.orders.find(x=>x.id===oc); const t=new Date().toISOString();
     const done=await must(sb.from('orders').update({canceled:t}).eq('id',oc).eq('status','접수').is('canceled',null).select());
     if(!done.length) alert('이미 출고됐거나 취소된 발주입니다. 새로고침 후 확인하세요.'); else Object.assign(o, done[0]);
@@ -873,7 +879,7 @@ function onlineSum(f, t){
 }
 function renderSales(){
   const f=$('sl-from').value, t=$('sl-to').value, c=findCust($('sl-cust').value);
-  const rows = db.slips.filter(s=>(!f||s.date>=f)&&(!t||s.date<=t)&&(!c||s.code===c.code)).sort((a,b)=>b.date.localeCompare(a.date)||b.id.localeCompare(a.id));
+  const rows = db.slips.filter(s=>!s.canceled && (!f||s.date>=f)&&(!t||s.date<=t)&&(!c||s.code===c.code)).sort((a,b)=>b.date.localeCompare(a.date)||b.id.localeCompare(a.id));
   $('sl-table').tBodies[0].innerHTML = rows.map(s=>`<tr class="${s.canceled?'cancel':''}"><td>${s.date}</td><td>${s.id}</td><td>${cust(s.code)?.name}</td>
     <td>${s.lines.map(l=>l.name+' '+l.qty).join(', ').slice(0,60)}</td><td class="n">${won(s.total)}</td>
     <td><button class="btn" data-p="${s.id}">다시 출력</button> ${s.canceled?'':`<button class="btn warn" data-c="${s.id}">취소</button>`}</td></tr>`).join('') || '<tr><td colspan="6" class="mut">아직 저장한 명세서가 없습니다.</td></tr>';
@@ -882,7 +888,31 @@ function renderSales(){
 }
 $('sl-table').onclick = async e=>{ const p=e.target.dataset.p, c=e.target.dataset.c;
   if(p) printSlip(db.slips.find(s=>s.id===p));
-  if(c && confirm('이 명세서를 취소할까요? (지우지 않고 「취소」로 남깁니다)')){ const s=db.slips.find(s=>s.id===c); const t=new Date().toISOString(); await must(sb.from('slips').update({canceled:t}).eq('id',c)); s.canceled=t; renderSales(); } };
+  if(c) await cancelSlip(c); };
+// 명세서 취소 = 장부 목록·잔액에서 아예 빠진다(대표 11/16 「취소하면 아예 삭제」). 기록은 DB에 취소 표시로만 남아 되돌릴 수 있다.
+// 송장을 넣은 명세서면 주문취합 PC 추가주문표의 그 줄도 같이 지운다 — 11/16 취소 후 다시 만든 명세서 송장이 두 번 나감.
+async function cancelSlip(id){
+  const s=db.slips.find(x=>x.id===id); if(!s || s.canceled) return;
+  await helperCheck();
+  const sent=String(s.memo||'').includes(COURIER_TAG) || cvSent.has(id);
+  if(sent && !cvHelper){
+    alert('이 명세서는 송장(추가주문표)에 들어간 것입니다.\n\n주문취합 PC의 「신아 납품 처리기」 창에서 취소하세요 — 거기서 취소해야 추가주문표의 송장 줄도 같이 지워져 송장이 두 번 나가지 않습니다.');
+    return;
+  }
+  if(!confirm(`명세서 ${id} (${cust(s.code)?.name||s.code}, ${won(s.total)}원)를 지울까요?\n\n장부 목록·잔액에서 빠집니다.`+(sent?'\n추가주문표의 송장 줄도 같이 지웁니다.':''))) return;
+  let note='', removed=false;
+  if(sent){
+    let r=null; try{ r=await helperCall('/remove',{'명세서':id}); }catch(e){}
+    if(!r || r['상태']==='err'){ alert('송장 줄을 지우지 못해 취소를 멈췄습니다: '+(r?.['글']||'도우미 응답 없음')); return; }
+    note=r['글']||''; removed=r['상태']==='ok';
+  }
+  // 송장 줄을 실제로 지웠으면(ok) [송장] 표시도 뗀다 → 다시 만든 명세서에 「이미 송장 넣음」 경고가 안 뜬다. 줄이 없었으면(none) 표시는 남긴다.
+  const t=new Date().toISOString(), upd={canceled:t};
+  if(removed) upd.memo=String(s.memo||'').replace(COURIER_TAG,'').trim();
+  await must(sb.from('slips').update(upd).eq('id',id)); Object.assign(s,upd); cvSent.delete(id);
+  renderSales(); drawCourier();
+  if(note) alert(note);
+}
 
 /* ── 월 마감 (홈택스 발행용) ── */
 $('mc-down').onclick = ()=>{
