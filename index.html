@@ -1579,6 +1579,7 @@ async function start(){
   $('login').style.display='none'; $('who').textContent = (mem.data.name||'')+' '+session.user.email;
   try{ await load(); }catch(e){ alert('장부를 못 불러왔습니다: '+e.message); return; }
   fillList(); $('s-date').value ||= today(); $('p-date').value ||= today(); $('mc-month').value ||= today().slice(0,7); $('pr-date').value ||= today(); $('rw-date').value ||= today(); drawLines(); showPwRecovery();
+  if(typeof traceInit==='function') traceInit();   // 유통이력(trace.js)
 }
 $('lg-in').onclick = async ()=>{ $('lg-msg').textContent='확인 중…';
   const { error } = await sb.auth.signInWithPassword({ email:$('lg-email').value.trim(), password:$('lg-pw').value });
@@ -1608,7 +1609,7 @@ $('pw-save').onclick = async ()=>{ if($('pw-save').disabled) return;
   finally{ $('pw-save').disabled=false; } };
 let pwRecovery=/type=recovery/.test(location.hash);   // 인증 라이브러리가 주소를 지우기 전에 확인
 $('logout').onclick = async ()=>{ await sb.auth.signOut(); location.reload(); };
-$('reload').onclick = async ()=>{ await load(); fillList(); setCust(); document.querySelector('#nav .on').click(); };
+$('reload').onclick = async ()=>{ await load(); fillList(); setCust(); if(typeof traceInit==='function') await traceInit(); document.querySelector('#nav .on').click(); };
 sb.auth.onAuthStateChange((ev)=>{
   if(ev==='PASSWORD_RECOVERY'){ pwRecovery=true; if($('login').style.display!=='none') start(); }
   if(ev==='SIGNED_IN' && $('login').style.display!=='none') start(); });
@@ -1618,5 +1619,7 @@ function showPwRecovery(){ if(!pwRecovery) return; pwRecovery=false;
   $('pw-note').innerHTML='<b style="color:var(--wine)">재설정 링크로 들어왔습니다. 새 비밀번호를 정하세요.</b>'; $('pw-new').focus(); }
 $('login').style.display='none'; start();
 </script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="trace.js"></script>
 </body>
 </html>
