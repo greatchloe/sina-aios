@@ -828,19 +828,63 @@ $('o-table').onclick = async e=>{
 };
 
 /* ── 인쇄 ── */
-function slipHTML(s, copy){
-  const c = cust(s.code), me = db.me, rows = s.lines.slice(); while(rows.length<12) rows.push(null);
-  return `<div class="slip"><div class="copy">${copy}</div><h1>거 래 명 세 서</h1>
-  <div class="mut" style="font-size:10px">번호 ${s.id} · 거래일 ${s.date}</div>
-  <div class="who"><table style="flex:1"><tr><th rowspan="4" style="width:16px">공<br>급<br>받<br>는<br>자</th><th>상호</th><td>${c.legal}</td></tr>
-    <tr><th>사업자번호</th><td>${c.bizno||''}</td></tr><tr><th>대표자</th><td>${c.ceo||''}</td></tr><tr><th>주소</th><td>${c.addr||''}</td></tr></table>
-  <table style="flex:1"><tr><th rowspan="4" style="width:16px">공<br>급<br>자</th><th>상호</th><td>${me.name}</td></tr>
-    <tr><th>사업자번호</th><td>${me.bizno}</td></tr><tr><th>대표자</th><td>${me.ceo}</td></tr><tr><th>주소</th><td>${me.addr}${me.tel?' · '+me.tel:''}</td></tr></table></div>
-  <table class="items" style="margin-top:4px"><tr><th style="width:24px">No</th><th>품명</th><th>규격</th><th>단위</th><th>수량</th><th>단가</th><th>금액</th></tr>
-  ${rows.map((l,i)=>l?`<tr><td>${i+1}</td><td>${l.name}</td><td>${l.spec}</td><td>${l.unit}</td><td style="text-align:right">${l.qty}</td><td style="text-align:right">${won(l.price)}</td><td style="text-align:right">${won(l.amt)}</td></tr>`:'<tr><td>&nbsp;</td><td></td><td></td><td></td><td></td><td></td><td></td></tr>').join('')}
-  <tr><th colspan="6">합 계</th><th style="text-align:right">${won(s.total)}</th></tr></table>
-  <div style="margin-top:3px;display:flex;justify-content:space-between"><span>${slipBalanceText(s)}</span><span>${me.bank||''}</span></div>
-  ${s.memo?`<div>메모: ${s.memo}</div>`:''}<div style="text-align:right;margin-top:2px">인수자 __________ (인)</div></div>`;
+/* ── 인쇄: 거래명세서 — 기존 신아푸드 ERP 거래명세서 양식(11/12 삼성점 출력본, 대표 11/16 「이 서식 그대로」) ──
+   업무도구/납품명세서.py 의 slip_html·CSS 와 같은 모양. 둘 중 하나를 고치면 다른 쪽도 같이 고친다(11/17).
+   A4 위쪽 절반(148.5mm)에 한 장 — 아래 절반은 비워 둔다(대표 11/16). 도장 칸은 비워 둔다. */
+const SLIP_BANK = '국민 116601-04-231975 권효서(신아푸드)';   // me.bank 가 비었을 때(기존 명세서 아래 줄)
+const SLIP_DONG = '(대저1동)';
+const SLIP_CSS = `@page erp{size:A4;margin:0}
+#print .erp{page:erp;height:148.5mm;padding:7mm 9mm 0;box-sizing:border-box;overflow:hidden;border-bottom:1px dashed #999;
+  font-family:'Gulim','Malgun Gothic',sans-serif;color:#000;font-size:11px;page-break-after:always}
+#print .erp table{border-collapse:collapse;table-layout:fixed;width:100%}
+#print .erp td{border:1px solid #000;padding:0 3px;font-weight:normal;overflow:hidden;background:none;font-size:11px}
+#print .erp .c{text-align:center}#print .erp .r{text-align:right}#print .erp .b{font-weight:bold}
+#print .erp .top .no{font-size:10px;text-align:center;height:6mm}
+#print .erp .top .ttl{border:0;text-align:center;font-size:22px;letter-spacing:8px;padding:0;white-space:nowrap;height:9mm}
+#print .erp .top .dt{border:0;border-top:1px solid #000;text-align:center;font-size:11px;height:5mm}#print .erp .top .nb{border:0}
+#print .erp .ap td{text-align:center;font-size:10px;height:4.5mm}#print .erp .ap tr.sg td{height:10mm}
+#print .erp .who td{height:6.5mm;white-space:nowrap}#print .erp .who td.v{text-align:center;line-height:1.3;letter-spacing:0;padding:0}
+#print .erp .who td.k{text-align:center;letter-spacing:5px}#print .erp .who td.addr{white-space:normal;line-height:1.15;height:8mm}
+#print .erp .it td{height:5mm;white-space:nowrap}#print .erp .it tr.h td{text-align:center;letter-spacing:4px}
+#print .erp .sum td{text-align:center;letter-spacing:4px;height:5mm}
+#print .erp .sum tr.v td{text-align:right;letter-spacing:0;font-size:13px;font-weight:bold;height:7mm}
+#print .erp .ft{display:flex;justify-content:space-between;margin-top:1.5mm;font-size:11px}`;
+(()=>{ const st=document.createElement('style'); st.textContent=SLIP_CSS; document.head.appendChild(st); })();
+
+function slipHTML(s){
+  const c = cust(s.code), me = db.me;
+  const e = v => String(v ?? '').replace(/[&<>"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch]));
+  const num = v => Number(v).toLocaleString('ko-KR',{minimumFractionDigits:1,maximumFractionDigits:1});   // 단가: 46,000.0
+  const qty = v => String(Number(v));
+  const [y,m,d] = String(s.date).slice(0,10).split('-');
+  // 전일잔액: 월말 정산처(monthly)는 이번 달 전잔액만(지난달 미수 빼라, 대표 11/16)
+  const monthly = !!(db.shipRules||{})[s.code]?.monthly;
+  const prev = monthly ? monthPart(s.code,s.date,s.id) : balance(s.code,s.date,s.id);
+  const rows = s.lines.slice(); while(rows.length<13) rows.push(null);
+  const items = rows.map((l,i)=> l
+    ? `<tr><td class="c">${i+1}</td><td>${e(l.name)}</td><td>${e(l.spec)}</td><td class="r">${qty(l.qty)}</td><td class="r">${num(l.price)}</td><td class="r">${won(l.amt ?? l.qty*l.price)}</td><td></td></tr>`
+    : '<tr><td>&nbsp;</td><td></td><td></td><td></td><td></td><td></td><td></td></tr>').join('');
+  const memo = String(s.memo||'').replace('[송장]','').trim();
+  const addr = String(me.addr||'') + (String(me.addr||'').includes(SLIP_DONG) ? '' : ' '+SLIP_DONG);
+  return `<div class="erp"><table class="top"><colgroup><col style="width:19%"><col style="width:44%"><col style="width:2%"><col></colgroup><tr>
+<td class="nb" style="padding:0;vertical-align:top"><table><tr><td class="no">거래명세서 번호</td></tr><tr><td class="no b" style="height:8mm;font-size:12px">${e(s.id)}</td></tr></table></td>
+<td class="nb" style="padding:0 10px;vertical-align:top"><table><tr><td class="ttl">거 래 명 세 서</td></tr><tr><td class="dt">${y} 년 ${Number(m)} 월 ${Number(d)} 일</td></tr></table></td>
+<td class="nb"></td>
+<td class="nb" style="padding:0;vertical-align:top"><table class="ap"><colgroup><col style="width:25%"><col style="width:25%"><col style="width:25%"><col></colgroup>
+<tr><td>작 성</td><td colspan="2">검 토</td><td>승 인</td></tr><tr class="sg"><td></td><td></td><td></td><td></td></tr></table></td></tr></table>
+<table class="who" style="margin-top:6px"><colgroup><col style="width:3.5%"><col style="width:7%"><col style="width:19%"><col style="width:5.5%"><col style="width:12%">
+<col style="width:3.5%"><col style="width:7%"><col style="width:19%"><col style="width:5.5%"><col></colgroup>
+<tr><td class="v" rowspan="3">공<br>급<br>자</td><td class="k">번호</td><td colspan="3">${e(me.bizno)}</td>
+<td class="v" rowspan="3">공<br>급<br>받<br>는<br>자</td><td class="k">번호</td><td>${e(c.bizno)}</td><td class="c">성명</td><td>${e(c.ceo)}</td></tr>
+<tr><td class="k">상호</td><td>${e(me.name)}</td><td class="c">성명</td><td>${e(me.ceo)}</td>
+<td class="k">상호</td><td colspan="3" class="b">${e(c.legal||c.name)}</td></tr>
+<tr><td class="k">주소</td><td colspan="3" class="addr" style="height:34px">${e(addr)}</td>
+<td class="k">주소</td><td colspan="3" class="addr">${e(c.addr)}</td></tr></table>
+<table class="it" style="margin-top:-1px"><colgroup><col style="width:4%"><col style="width:39%"><col style="width:10%"><col style="width:8%"><col style="width:14%"><col style="width:14%"><col></colgroup>
+<tr class="h"><td>No</td><td>품명</td><td>규격</td><td>수량</td><td>단가</td><td>금액</td><td>비고</td></tr>${items}</table>
+<table class="sum" style="margin-top:-1px"><tr><td>전 일 잔 액</td><td>입 금 액</td><td>현 재 잔 액</td><td>공 급 가 액</td><td>부 가 세</td><td>합 계 금 액</td></tr>
+<tr class="v"><td>${won(prev)}</td><td></td><td>${won(prev + s.total)}</td><td>${won(s.total)}</td><td></td><td>${won(s.total)}</td></tr></table>
+<div class="ft"><span>${e(me.bank||SLIP_BANK)}</span><span>1 / 1</span></div>${memo?`<div style="margin-top:1mm">메모: ${e(memo)}</div>`:''}</div>`;
 }
 // 명세서 아래 잔액 줄. 월말에 한 달 치를 받는 거래처(택배비 기준 monthly, 대표 11/16)는 「이번 달」만 크게 보여 주고
 // 지난달까지 남은 미수는 작게 따로 적는다. 장부의 실제 미수금(balance)은 바꾸지 않는다.
@@ -857,7 +901,7 @@ function slipBalanceText(s){
   // 지난달까지 미수(carry)는 명세서에 적지 않는다(대표 11/16) — 실제 미수금은 장부 미수금 현황에만.
   return `${mon}월 전잔액 ${won(m)} · 금일 ${won(s.total)} · ${mon}월 누계 ${won(m+s.total)}`;
 }
-function printSlip(s){ $('print').innerHTML = slipHTML(s,'공급받는자용') + slipHTML(s,'공급자 보관용'); setTimeout(()=>window.print(),50); }
+function printSlip(s){ $('print').innerHTML = slipHTML(s); setTimeout(()=>window.print(),50); }
 
 /* ── 잔액 계산 ── */
 // 전환 기준일(settings 「opening_date」)이 있으면 기초잔액은 그날 시작 잔액이고, 그 전 명세서·입금은 잔액에 넣지 않는다.
