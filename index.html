@@ -407,7 +407,7 @@ $('s-chips').onclick = e=>{ const i=e.target.dataset.i; if(i===undefined) return
 const ITEM_ALIAS = {"김":"포기","김치":"포기","포기":"포기","포기김치":"포기","고향포기":"포기","고향김치":"포기","고향":"포기","맛김치":"맛김치","고향맛":"맛김치","맛":"맛김치",
   "백":"백김치","백김치":"백김치","쪽":"쪽파","쪽파":"쪽파","쪽파김치":"쪽파","파김치":"쪽파","갓":"갓김치","갓김치":"갓김치","깍":"깍두기","깍두기":"깍두기","깍뚜기":"깍두기",
   "열무물":"열무물","열무물김치":"열무물","얼갈이":"얼갈이","얼갈이겉절이":"얼갈이","얼갈이고엽":"얼갈이","얼갈이고명":"얼갈이","냉면무채":"무채","무채":"무채",
-  "간장마늘쫑":"간장마늘쫑","마늘쫑":"마늘쫑","마늘쫑채":"마늘쫑채","궁채":"궁채","궁채장아찌":"궁채","김치양념":"김치양념","양념":"김치양념","정성":"정성김치","정성김치":"정성김치",
+  "간장마늘쫑":"마늘쫑","마늘쫑":"마늘쫑","마늘쫑채":"마늘쫑","마늘쫑채장아찌":"마늘쫑","궁채":"궁채","궁채장아찌":"궁채","김치양념":"김치양념","양념":"김치양념","정성":"정성김치","정성김치":"정성김치",
   "슬라이스":"슬라이스","볶음김치":"볶음김치","오말랭이":"오말랭이","말랭이":"오말랭이","택배":"택배비","택배비":"택배비","샬롯":"샬롯","깻잎":"깻잎","명이":"명이","고추채":"고추채","쌈무":"쌈무"};
 let CUST_ALIAS = {};   // 거래처 줄임말은 클라우드 설정(cust_alias)에서 읽는다 — 코드에 회사 정보를 두지 않는다
 const norm = s => s.replace(/\(수입\)/g,'').replace(/\d+(\.\d+)?\s*(키로|kg|KG|그람|g)/g,'').replace(/[\s()]/g,'');
@@ -443,6 +443,7 @@ function itemFor(c, word, kg){
   return {it, guessedOrigin: !origin && pool.some(isImported) && pool.some(x=>!isImported(x))};
 }
 const KAKAO_ITEM_RE = /([가-힣A-Za-z]{1,12})\s*(\d+(?:\.\d+)?)\s*(?:(키로|킬로|kg|KG|Kg|그람|g)(?:짜리)?(?:\s*[xX×*]?\s*(\d+(?:\.\d+)?)\s*(?:박스|개|EA|ea|통|봉|팩|box|BOX)?)?|(?:박스|개|EA|ea|통|봉|팩|box|BOX))?/g;
+let readMiss=[];   // 주문 글에서 못 읽은 품목 — 그냥 빠지지 않게 저장 전에 다시 묻는다(대표 11/19: 교대점 마늘쫑채 2박스 누락)
 $('s-read').onclick = ()=>{
   const t = $('s-kakao').value.trim(); if(!t) return;
   if(lines.some(l=>l._qtyText!==undefined)) return alert('잘못된 수량을 먼저 수정하세요.');
@@ -473,10 +474,12 @@ $('s-read').onclick = ()=>{
     if(shipRuleFor(c) && /택배/.test(it.name)){ notes.push(`글의 「${m[0].trim()}」은 넣지 않고 거래처 택배비 기준으로 자동 계산합니다`); continue; }
     if(r.guessedOrigin) notes.push(`${m[1]} → 수입·국산이 둘 다 있어 많이 쓴 「${it.name}」로 넣음`);
     const ex=lines.find(l=>l.name===it.name&&l.spec===it.spec); if(ex) ex.qty+=q; else lines.push({name:it.name,spec:it.spec,unit:it.unit,qty:q,price:it.price}); ok++; }
+  for(const x of body.matchAll(/([가-힣]{1,12})\s*(한|두|세|네|다섯|여섯|일곱|여덟|아홉|열)\s*(박스|개|통|봉|팩)/g)) miss.push(`${x[0].trim()} (수량을 숫자로 못 읽음)`);
+  readMiss=miss.slice();
   drawLines();
   $('s-readmsg').innerHTML = `${c.name} · ${ok}개 품목을 기존 단가로 넣었습니다.`
     + (notes.length?` <b style="color:var(--gold)">확인: ${notes.join(' / ')}</b>`:'')
-    + (miss.length?` <b style="color:var(--wine)">못 읽은 것: ${miss.join(', ')} — 아래 품목 버튼이나 빈 줄로 직접 넣어 주세요.</b>`:'');
+    + (miss.length?` <b style="color:var(--wine)">⚠ 명세서에 안 들어간 주문: ${miss.join(', ')} — 품목 버튼이나 빈 줄로 넣어 주세요. 그대로 저장하려 하면 다시 묻습니다.</b>`:'');
 };
 
 /* ── 택배비 자동 계산: 거래처별 기준(settings 「ship_rules」)으로 맨 아래 택배비 줄을 만든다 ── */
@@ -575,7 +578,7 @@ $('s-table').addEventListener('input', e=>{ const i=e.target.dataset.i,k=e.targe
   const prices=lines.map(l=>parseUnitPriceWon(String(l.price??'')));
   $('s-total').textContent = lines.some(l=>l._qtyText!==undefined)?'수량 확인':prices.some(p=>p===null)?'단가 확인':won(lines.reduce((a,l,j)=>a+Math.round(l.qty*prices[j]),0)); });
 $('s-table').addEventListener('click', e=>{ const d=e.target.dataset.del; if(d===undefined) return; if(lines[d]._auto) shipManual=true; lines.splice(d,1); drawLines(); });
-$('s-clear').onclick = ()=>{ lines=[]; shipManual=false; outOrder=null; showOutOrder(); $('s-cust').value=''; $('s-memo').value=''; setCust(); drawLines(); };
+$('s-clear').onclick = ()=>{ readMiss=[]; lines=[]; shipManual=false; outOrder=null; showOutOrder(); $('s-cust').value=''; $('s-memo').value=''; setCust(); drawLines(); };
 // 명세서·발주 저장 공통 입력 검사. 문제가 있으면 알리고 null, 통과하면 저장할 줄 목록.
 function checkedLines(){
   if(!cur){ alert('거래처를 먼저 고르세요.'); return null; }
@@ -589,6 +592,7 @@ function checkedLines(){
   if(!ls.length){ alert('품목을 하나 이상 넣으세요.'); return null; }
   const zero=zeroPriceLines(ls);
   if(zero.length && !confirm(`단가가 0원인 줄이 있습니다: ${zero.join(', ')}\n\n단가 칸이 비어 있어도 0원이 됩니다. 무상(샘플·서비스)이 맞을 때만 「확인」을 누르세요.`)) return null;
+  if(readMiss.length && !confirm(`주문 글에서 못 읽은 품목이 있습니다:\n${readMiss.join('\n')}\n\n명세서에 넣지 않으면 송장·라벨에서도 빠집니다.\n「취소」를 누르고 품목을 넣거나 거래처에 확인하세요.\n직접 넣었거나 빼는 것이 맞을 때만 「확인」을 누르세요.`)) return null;
   return ls;
 }
 $('s-save').onclick = async ()=>{
@@ -643,7 +647,7 @@ $('s-save').onclick = async ()=>{
   if(isCourier(savingCustomer.code)){ courierFill(slip); drawCourier(); }
   if(recheckRule?.recheck) clearRecheck(savingCustomer.code);
   if(cur===savingCustomer && inputSnapshot===JSON.stringify([lines,...['s-cust','s-date','s-memo','s-kakao'].map(id=>$(id).value)])){
-    lines=[]; shipManual=false; $('s-memo').value=''; $('s-kakao').value=''; $('s-readmsg').textContent=''; showOutOrder();
+    readMiss=[]; lines=[]; shipManual=false; $('s-memo').value=''; $('s-kakao').value=''; $('s-readmsg').textContent=''; showOutOrder();
   } else alert('앞서 요청한 명세서는 저장됐습니다. 대기 중 바꾼 입력은 유지했습니다. 다음 저장 전 내용을 확인하세요.');
   } finally{ $('s-save').disabled=false; }
   setCust(); drawLines();
@@ -785,7 +789,7 @@ $('s-order').onclick = async ()=>{
   finally{ $('s-order').disabled=false; }
   db.orders.push(row);
   if(inputSnapshot===JSON.stringify([lines,...['s-cust','s-date','s-memo','s-kakao'].map(id=>$(id).value)])){
-    lines=[]; shipManual=false; $('s-memo').value=''; $('s-kakao').value=''; drawLines();
+    readMiss=[]; lines=[]; shipManual=false; $('s-memo').value=''; $('s-kakao').value=''; drawLines();
     $('s-readmsg').innerHTML=`<b>발주 ${row.id} 저장 (${savingCustomer.name}, 출고 예정 ${ship}, ${won(orderTotal(row))}원).</b> 매출에는 아직 안 들어갔습니다 — 발주 목록에서 「출고하기」를 누르세요.`;
   } else alert(`발주 ${row.id}는 저장됐습니다. 대기 중 바꾼 입력은 유지했습니다. 다음 저장 전 내용을 확인하세요.`);
 };
@@ -816,7 +820,7 @@ $('o-table').onclick = async e=>{
     $('s-cust').value=c.code+' '+c.name; setCust();
     // 나눠 보내는 남은 분량(우리 물량부족)은 택배비를 붙이지 않는다(대표 11/16). 발주 메모 「[택배비 없음]」 또는 「택배비 받지 않음」.
     const noFee=/\[택배비 없음\]|택배비 받지 않음/.test(String(o.memo||''));
-    outOrder=o; shipManual=noFee; $('s-date').value=today(); $('s-memo').value=o.memo||''; $('s-kakao').value='';
+    readMiss=[]; outOrder=o; shipManual=noFee; $('s-date').value=today(); $('s-memo').value=o.memo||''; $('s-kakao').value='';
     $('s-readmsg').innerHTML=noFee?'<b style="color:var(--wine)">나눠 보내는 남은 분량이라 택배비를 붙이지 않습니다(발주 메모). 받아야 하면 택배비 줄을 직접 넣으세요.</b>':'';
     drawLines(); showOutOrder(); document.querySelector('#nav button[data-v="slip"]').click(); return; }
   if(oc && confirm('이 발주를 지울까요? 발주 목록에서 빠집니다.')){
