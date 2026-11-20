@@ -297,7 +297,21 @@ td input{padding:4px 6px}
     </div>
     <datalist id="rawlist"></datalist>
     <p class="mut" id="rw-conv"></p>
-    <p class="mut">조정은 실사 차이(+/−)를 넣습니다. 매입 명세서 사진 읽기는 다음 단계에서 이 칸을 자동으로 채웁니다.</p>
+    <p class="mut">조정은 실사 차이(+/−)를 넣습니다. 업체 거래명세서는 아래 「거래명세서 붙여넣기」로 한 번에 넣을 수 있습니다.</p>
+  </div>
+  <div class="card">
+    <h2>거래명세서 붙여넣기 <span class="mut">(문자·카톡·엑셀 복사 → 원료 입고)</span></h2>
+    <textarea id="st-text" rows="6" placeholder="예)&#10;○○상회 10/14&#10;열무 30단 4,000 120,000&#10;알타리 50 6000 300000&#10;양파 5망 24- 120-&#10;합계 540,000"></textarea>
+    <div class="row">
+      <div style="max-width:160px"><label>날짜(글에 없을 때)</label><input type="date" id="st-date"></div>
+      <div><label>매입처(글에 없을 때)</label><input id="st-sup" list="stsuplist"></div>
+      <div style="flex:0"><button class="btn" id="st-read">읽기</button></div>
+      <div style="flex:0"><button class="btn pri" id="st-save" disabled>선택한 줄 입고 저장</button></div>
+    </div>
+    <datalist id="stsuplist"></datalist>
+    <p class="mut" id="st-msg"></p>
+    <div class="wrap"><table id="st-table"><thead><tr><th></th><th>명세서 품목</th><th>원료</th><th class="n">수량</th><th>단위</th><th class="n">1단위 kg</th><th class="n">입고 kg</th><th class="n">단가</th><th class="n">금액</th><th>확인</th></tr></thead><tbody></tbody></table></div>
+    <p class="mut">원료 이름을 고치거나 1단위 kg을 넣고 저장하면 다음부터 그대로 기억합니다. 「8-」「120-」처럼 쓴 손글씨 금액은 천 원 단위로 읽습니다.</p>
   </div>
   <div class="card">
     <h2>원료수불부 <span class="mut">(이월 + 입고 − 사용 ± 조정 = 재고)</span></h2>
@@ -354,7 +368,7 @@ async function load(){
     sb.from('customers').select('*').order('code'),
     sb.from('slips').select('*').order('date').range(0, 49999),
     sb.from('pays').select('*').order('date').range(0, 49999),
-    sb.from('settings').select('key,value').in('key',['recipes','prod_alias','raw_conv','loss','ship_rules','pay_alias','opening_date','raw_pack']),
+    sb.from('settings').select('key,value').in('key',['recipes','prod_alias','raw_conv','loss','ship_rules','pay_alias','opening_date','raw_pack','raw_alias']),
     sb.from('prods').select('*').order('date').range(0, 49999),
     sb.from('raw_moves').select('*').order('date').range(0, 49999),
     sb.from('orders').select('*').order('date').range(0, 49999),
@@ -364,7 +378,7 @@ async function load(){
   const S = Object.fromEntries(st.data.map(r=>[r.key, r.value]));
   db = {me: me.data?.value || {}, customers: cs.data.map(c=>({...c, opening:Number(c.opening)||0, items:c.items||[]})),
         slips: sl.data.map(x=>({...x, total:Number(x.total)})), pays: py.data.map(x=>({...x, amt:Number(x.amt)})),
-        orders: od.data, rawPack: S.raw_pack || null, openingDate: S.opening_date || null, payAlias: S.pay_alias || {}, shipRules: S.ship_rules || {}, recipes: S.recipes || {}, prodAlias: S.prod_alias || {}, rawConv: S.raw_conv || {}, loss: Number(S.loss) || 1.09,
+        orders: od.data, rawPack: S.raw_pack || null, rawAlias: S.raw_alias || {}, openingDate: S.opening_date || null, payAlias: S.pay_alias || {}, shipRules: S.ship_rules || {}, recipes: S.recipes || {}, prodAlias: S.prod_alias || {}, rawConv: S.raw_conv || {}, loss: Number(S.loss) || 1.09,
         prods: pr.data.map(x=>({...x, kg:Number(x.kg)})), raws: rw.data.map(x=>({...x, qty:Number(x.qty), amt:Number(x.amt)||0})),
         onlineDays: ol.error ? [] : (ol.data||[])};   // 취합기가 올리는 온라인 하루 요약(없어도 장부는 돈다)
 }
@@ -1508,6 +1522,7 @@ function auditNote(now){
   return {warn:days>7, text:`마지막 실사 조정 ${adj} (${days}일 전) · 그 뒤 생산 차감 ${since}건`+(days>7?' — 일주일이 지났습니다. 원료를 세어 「조정」으로 맞추세요.':'')};
 }
 function renderRaw(){
+  renderStmt();
   { const a=auditNote(today()); $('rb-audit').textContent=a.text; $('rb-audit').style.color=a.warn?'var(--wine)':''; $('rb-audit').style.fontWeight=a.warn?'bold':''; }
   $('rawlist').innerHTML = rawNames().map(k=>`<option value="${k}">`).join('');
   const f=$('rb-from').value||'0000', t=$('rb-to').value||'9999', one=$('rb-raw').value.trim(), ev=rawEvents();
@@ -1560,6 +1575,140 @@ $('rw-save').onclick = async ()=>{ if($('rw-save').disabled) return; const raw=$
   else alert('앞서 요청한 원료 기록은 저장됐습니다. 대기 중 바꾼 입력은 지우지 않고 유지했습니다. 다음 저장 전 내용을 확인하세요.');
   renderRaw(); };
 $('rw-table').onclick = async e=>{ const c=e.target.dataset.c; if(c && confirm('이 기록을 취소할까요?')){ const t=new Date().toISOString(); await must(sb.from('raw_moves').update({canceled:t}).eq('id',c)); db.raws.find(r=>r.id===c).canceled=t; renderRaw(); } };
+/* ── 거래명세서 붙여넣기 → 원료 입고 (대표 11/20) ──
+   글(문자·카톡·엑셀 복사·손글씨 받아 적은 것)에서 날짜·매입처·품목 줄을 읽고, 원료 이름과 kg으로 바꿔 보여 준 뒤 고른 줄만 raw_moves 「입고」로 저장한다.
+   회사마다 다른 값은 코드에 두지 않는다: 원료 이름 기억 = settings.raw_alias, 단위 kg = settings.raw_pack. 아래 기본값은 업종 공통 표현만. */
+const STMT_UNITS = 'kg|KG|Kg|키로|킬로|단|망|박스|box|BOX|Box|봉지|봉|포|통|캔|개|EA|ea|자루|팩|병|말|관';
+const STMT_UNIT_NORM = {KG:'kg',Kg:'kg','키로':'kg','킬로':'kg',box:'박스',BOX:'박스',Box:'박스',EA:'개',ea:'개'};
+const STMT_SKIP = /^(합\s*계|소\s*계|총\s*계|공급가액|공급대가|부가세|세\s*액|VAT|전\s*잔액|후\s*잔액|잔\s*액|금일\s*잔액|입금|사업자|등록번호|TEL|전화|팩스|FAX|계좌|은행|주소|대표|성명|귀하|영수|청구|인수|일련번호|금\s*액|품\s*목|월\s*일|No\.?|수량|단가|비고|작성)/i;
+const STMT_NOISE = /은행|계좌|예금주|사업자|등록번호|전화|TEL|FAX|팩스|주소|[0-9]{2,4}-[0-9]{3,4}-[0-9]{4}|[0-9]{3}-[0-9]{2}-[0-9]{5}/i;
+const STMT_NOT_RAW = /운송비|운임|택배비|배송비|퀵|용차|운반비|아이스팩|아이스박스|스치로폼|박스대|비닐|봉투|테이프/;
+const RAW_ALIAS_DEFAULT = {'정구지':['부추'],'깐파':['쪽파','파'],'쪽파':['쪽파','파'],'알타리':['총각무','알타리'],'총각무':['총각무','알타리'],
+  '청방배추':['청방'],'소금':['정제소금','정제염','재제소금','소금'],'천일염':['천일염','정제소금','정제염'],'한주소금':['정제소금','정제염'],
+  '깐마늘':['마늘'],'중마늘':['마늘'],'간생강':['생강'],'깐생강':['생강'],'액젓':['멸치액젓','액젓'],'까나리액젓':['액젓'],'새우젓':['새우젓','젓갈'],
+  '찹쌀':['찹쌀','찹쌀풀'],'찹쌀가루':['찹쌀','찹쌀풀'],'보리':['보리','보리죽'],'고춧가루김치용':['고춧가루'],'고춧가루매운맛':['청양고춧가루','고춧가루'],'고춧가루청양':['청양고춧가루','고춧가루']};
+// 숫자 하나: 「8-」「120-」= 천 원 단위 손글씨, 「3만」, 「1.5천」, 쉼표 허용. 뒤에 단위가 붙을 수 있다.
+const STMT_NUM = new RegExp('([0-9][0-9,]*(?:\\.[0-9]+)?)\\s*(-(?![0-9])|천|만)?\\s*('+STMT_UNITS+')?(?![가-힣A-Za-z])','g');
+function stmtDate(text, base){
+  const y0=(base||today()).slice(0,4);
+  let m=text.match(/(20[0-9]{2})\s*[./-년]\s*([0-9]{1,2})\s*[./-월]\s*([0-9]{1,2})/);
+  if(m) return `${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`;
+  m=text.match(/(?:^|[^0-9,.])([0-9]{1,2})\s*(?:\/|월\s*|\.)\s*([0-9]{1,2})(?:\s*일)?(?![0-9,]|\s*(?:kg|키로|단|망|박스|포|개))/);
+  if(m && +m[1]>=1 && +m[1]<=12 && +m[2]>=1 && +m[2]<=31) return `${y0}-${m[1].padStart(2,'0')}-${m[2].padStart(2,'0')}`;
+  return null;
+}
+function stmtNums(rest){
+  const out=[]; let m; STMT_NUM.lastIndex=0;
+  while((m=STMT_NUM.exec(rest))){ let v=Number(m[1].replace(/,/g,'')); if(!Number.isFinite(v)) continue;
+    if(m[2]==='-'||m[2]==='천') v*=1000; else if(m[2]==='만') v*=10000;
+    out.push({v, unit:m[3]?(STMT_UNIT_NORM[m[3]]||m[3]):null, short:!!m[2]}); }
+  return out;
+}
+// 한 줄: 품목 이름 + 숫자들. 수량·단가·금액(·세액)을 서로 곱해 맞는 조합을 고른다. 첫 숫자가 「20kg」 같은 규격이면 1단위 kg으로 쓴다.
+function stmtLine(line){
+  let t=line.replace(/[×xX*＊](?=\s*[0-9])/g,' ').replace(/\s+/g,' ').trim();
+  t=t.replace(/^(?:[0-9]{1,2}\s*[/.]\s*[0-9]{1,2}\.?|[①-⑳]|[0-9]{1,2}\)|-)\s+/,'');      // 앞에 붙은 날짜·번호
+  const masked=t.replace(/\([^)]*\)|\[[^\]]*\]/g,m=>m.replace(/[0-9]/g,'#')), at=masked.search(/[0-9]/); if(at<1) return null;
+  const name=t.slice(0,at).replace(/[〃"]/g,'').replace(/\s*[:：]\s*$/,'').trim(); if(!name || !/[가-힣A-Za-z]/.test(name)) return null;
+  const nums=stmtNums(masked.slice(at)); if(!nums.length) return null;
+  const close=(a,b)=>b>0 && Math.abs(a-b)<=Math.max(1,b*0.0015);
+  let spec=null, n=nums;
+  if(n.length>=4 && n[0].unit==='kg' && close(n[1].v*n[2].v,n[3].v)){ spec=n[0].v; n=n.slice(1); }
+  const qty=n[0].v, unit=n[0].unit; let price=null, amt=null, ok=true, guess=false;
+  if(n.length>=3){ price=n[1].v; amt=n[2].v; ok=close(qty*price,amt);
+    if(!ok && n[1].short && close(qty*price/10,amt)){ price/=10; ok=true; } }      // 「12-」가 1,200원인 손글씨
+  else if(n.length===2){ guess=true; amt=n[1].v; price=Math.round(amt/qty*100)/100; }   // 단가 없이 「수량 금액」만 쓴 줄
+  return {name, qty, unit, spec, price, amt, ok, guess, raw:line.trim()};
+}
+function stmtClean(name){ return name.replace(/\([^)]*\)|\[[^\]]*\]/g,m=>/김치용|매운|청양/.test(m)?m.replace(/[()\[\]\s]/g,''):'').replace(/국산|국내산|수입|중국산|벌크|특|상품|하품|\s/g,''); }
+function stmtRawName(name){
+  const names=[...new Set([...rawNames(),...Object.keys(db.rawPack||{})])], has=n=>names.includes(n), al=db.rawAlias||{};
+  if(al[name]) return {raw:al[name], by:'기억'};
+  const c=stmtClean(name); if(al[c]) return {raw:al[c], by:'기억'};
+  if(has(name)) return {raw:name, by:'이름'}; if(has(c)) return {raw:c, by:'이름'};
+  for(const k of [name,c]){ const d=RAW_ALIAS_DEFAULT[k]; if(d){ const f=d.find(has); if(f) return {raw:f, by:'비슷한 이름'}; } }
+  const hit=names.filter(n=>n.length>=2 && c.includes(n)).sort((a,b)=>b.length-a.length)[0]; if(hit) return {raw:hit, by:'비슷한 이름'};
+  return {raw:'', by:''};
+}
+function stmtPackUnits(raw){ return Object.keys((db.rawPack||RAW_PACK_DEFAULT)[raw]||{}); }
+// 글 전체 → {date, sup, rows, total}
+function parseStmt(text, defDate, defSup){
+  const lines=String(text||'').split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
+  const sups=[...new Set(db.raws.map(r=>r.supplier).filter(Boolean))];
+  let date=null, sup=null, total=null; const rows=[], bad=[];
+  for(const l of lines){
+    const sm=l.match(/(?:상\s*호|업체|매입처|공급자)\s*[:：]?\s*([^\s:：]{2,})/); if(sm && !sup) sup=sm[1].replace(/\(.*$/,'');
+    if(!sup){ const k=sups.find(x=>l.includes(x)); if(k) sup=k; }
+    if(/^(합\s*계|총\s*계|공급대가|금\s*액)/.test(l)){ const v=stmtNums(l).map(x=>x.v); if(v.length) total=Math.max(...v); continue; }
+    const d=stmtDate(l, defDate); if(d && !date && /20[0-9]{2}\s*[./-년]/.test(l)) date=d;
+    if(d){ const rest=l.replace(/(20[0-9]{2}\s*[./-년]\s*)?[0-9]{1,2}\s*(?:\/|월\s*|\.)\s*[0-9]{1,2}\s*일?\.?/,' ').replace(/작성|일자|년월일|날짜|[:：]/g,' ').trim();
+      if(!/[0-9]/.test(rest)){ if(!date) date=d; if(!sup && /^[가-힣A-Za-z()㈜ ]{2,20}$/.test(rest) && !STMT_SKIP.test(rest)) sup=rest.replace(/\s+/g,''); continue; } }
+    const rowDate=/^[0-9]{1,2}\s*[/.]\s*[0-9]{1,2}\.?\s+[가-힣A-Za-z]/.test(l) ? d : null;
+    if(STMT_SKIP.test(l) || STMT_NOISE.test(l)) continue;
+    const r=stmtLine(l); if(!r){ if(/[0-9]/.test(l) && /[가-힣]/.test(l)) bad.push(l); continue; }
+    if(sup && r.name===sup) continue;
+    rows.push({...r, date:rowDate});
+  }
+  date=date||rows.find(r=>r.date)?.date||defDate||today(); sup=sup||defSup||'';
+  return {date, sup, total, bad, rows:rows.map(r=>{
+    const notRaw=STMT_NOT_RAW.test(r.name), m=notRaw?{raw:'',by:''}:stmtRawName(r.name), units=stmtPackUnits(m.raw);
+    const unit=r.unit || (r.spec?'포':null) || units[0] || 'kg';
+    const pack=unit==='kg'?1:(r.spec||rawPack(m.raw,unit)||null);
+    const msg=[]; if(notRaw) msg.push('원료 아님'); if(!notRaw && !m.raw) msg.push('원료 고르기'); if(!r.unit && !r.spec) msg.push(units.length?`단위 없음 → 「${unit}」로 봄`+(units.length>1?`(다른 단위: ${units.slice(1).join(', ')})`:''):'단위 없음 — 단위 고르고 체크');
+    if(!pack) msg.push(`1${unit} kg 넣기`); if(!r.ok) msg.push('수량×단가≠금액, 확인'); if(r.guess) msg.push('숫자 2개 → 수량·금액으로 봄'); if(m.by==='비슷한 이름') msg.push(`「${r.name}」→${m.raw}?`);
+    return {name:r.name, raw:m.raw, by:m.by, qty:r.qty, unit, pack, price:r.price, amt:r.amt, date:r.date||date, on:!notRaw && !!m.raw && !!pack && !!(r.unit||r.spec||units.length), msg, src:r.raw};
+  })};
+}
+let stmt=null;
+function stmtDup(r, sup){ return db.raws.some(x=>!x.canceled && x.kind==='입고' && x.date===r.date && x.raw===r.raw && Math.abs(Number(x.qty)-r.qty*r.pack)<0.01 && (x.supplier||'')===(sup||'')); }
+function renderStmt(){
+  $('stsuplist').innerHTML=[...new Set(db.raws.map(r=>r.supplier).filter(Boolean))].map(k=>`<option value="${customerEscape(k)}">`).join('');
+  if(!stmt){ $('st-table').tBodies[0].innerHTML=''; $('st-save').disabled=true; return; }
+  const E=customerEscape, sum=stmt.rows.reduce((a,r)=>a+(Number(r.amt)||0),0), on=stmt.rows.filter(r=>r.on);
+  $('st-table').tBodies[0].innerHTML=stmt.rows.map((r,i)=>{ const units=[...new Set(['kg',r.unit,...stmtPackUnits(r.raw)])].filter(Boolean), dup=r.raw&&r.pack&&stmtDup(r,stmt.sup);
+    const msg=[...r.msg.filter(m=>!(m.startsWith('1')&&r.pack)&&!(m==='원료 고르기'&&r.raw)), dup?'이미 같은 입고 있음':''].filter(Boolean);
+    return `<tr><td><input type="checkbox" data-so="${i}" ${r.on?'checked':''}></td><td>${E(r.name)}${r.date!==stmt.date?` <small>${r.date}</small>`:''}</td>
+      <td><input data-sf="raw" data-i="${i}" list="rawlist" value="${E(r.raw)}" style="min-width:110px"></td><td class="n"><input data-sf="qty" data-i="${i}" value="${r.qty}" style="width:70px"></td>
+      <td><select data-sf="unit" data-i="${i}">${units.map(u=>`<option ${u===r.unit?'selected':''}>${E(u)}</option>`).join('')}</select></td>
+      <td class="n"><input data-sf="pack" data-i="${i}" value="${r.pack??''}" style="width:60px" ${r.unit==='kg'?'disabled':''}></td><td class="n">${r.pack?kg3(r.qty*r.pack):''}</td>
+      <td class="n">${r.price!=null?won(r.price):''}</td><td class="n">${r.amt!=null?won(r.amt):''}</td><td style="${msg.length?'color:var(--wine)':''}">${E(msg.join(' · '))}</td></tr>`; }).join('')
+    || '<tr><td colspan="10" class="mut">품목 줄을 못 찾았습니다. 「품목 수량 단가 금액」 순서로 한 줄씩 넣어 보세요.</td></tr>';
+  const diff=stmt.total!=null && Math.abs(stmt.total-sum)>=1;
+  $('st-msg').innerHTML=`날짜 <b>${stmt.date}</b> · 매입처 <b>${E(stmt.sup||'(없음)')}</b> · ${stmt.rows.length}줄 읽음, ${on.length}줄 저장 예정 · 금액 합 ${won(sum)}원`
+    + (stmt.total!=null?` · 명세서 합계 ${won(stmt.total)}원`+(diff?` <b style="color:var(--wine)">(차이 ${won(stmt.total-sum)}원 — 빠진 줄·에누리 확인)</b>`:' ✓'):'')
+    + (stmt.bad.length?` <b style="color:var(--wine)">못 읽은 줄: ${stmt.bad.map(E).join(' / ')}</b>`:'');
+  $('st-save').disabled=!on.length;
+}
+$('st-read').onclick=()=>{ const t=$('st-text').value; if(!t.trim()) return alert('거래명세서 글을 붙여 넣으세요.');
+  stmt=parseStmt(t, $('st-date').value||null, $('st-sup').value.trim()||null); if($('st-sup').value.trim()) stmt.sup=$('st-sup').value.trim(); renderStmt(); };
+$('st-table').addEventListener('change', e=>{ const t=e.target; if(!stmt) return;
+  if(t.dataset.so!=null){ stmt.rows[+t.dataset.so].on=t.checked; return renderStmt(); }
+  const r=stmt.rows[+t.dataset.i], f=t.dataset.sf; if(!r) return;
+  if(f==='raw'){ r.raw=t.value.trim(); r.by='직접'; r.pack=r.unit==='kg'?1:rawPack(r.raw,r.unit); }
+  if(f==='qty'){ const q=parseRawQuantityKg(t.value); if(q===null||q<=0) return alert('수량은 0보다 큰 숫자로 넣으세요.'); r.qty=q; if(r.price!=null) r.amt=Math.round(q*r.price); }
+  if(f==='unit'){ r.unit=t.value; r.pack=r.unit==='kg'?1:rawPack(r.raw,r.unit); }
+  if(f==='pack'){ const v=parseRawQuantityKg(t.value); r.pack=v&&v>0?v:null; r.packNew=!!r.pack; }
+  if(f!=='qty') r.on=!!(r.raw && r.pack);
+  renderStmt(); });
+$('st-save').onclick=async ()=>{ if(!stmt || $('st-save').disabled) return; const sup=($('st-sup').value.trim()||stmt.sup||'').trim();
+  const pick=stmt.rows.filter(r=>r.on); if(pick.some(r=>!r.raw||!r.pack)) return alert('원료 이름과 1단위 kg이 비어 있는 줄이 있습니다.');
+  const dups=pick.filter(r=>stmtDup(r,sup)); if(dups.length && !confirm(`이미 같은 날·같은 원료·같은 kg 입고가 ${dups.length}줄 있습니다(${dups.map(r=>r.raw).join(', ')}).\n두 번 넣는 것이 맞을 때만 「확인」을 누르세요.`)) return;
+  if(!confirm(`${stmt.date} ${sup||'(매입처 없음)'} — ${pick.length}줄, 합계 ${kg3(pick.reduce((a,r)=>a+r.qty*r.pack,0))}kg · ${won(pick.reduce((a,r)=>a+(Number(r.amt)||0),0))}원을 원료 입고로 저장할까요?`)) return;
+  const ins=pick.map(r=>({date:r.date, kind:'입고', raw:r.raw, qty:Math.round(r.qty*r.pack*1000)/1000, unit:'kg', supplier:sup||null,
+    price:r.price!=null?r.price/r.pack:null, amt:r.amt!=null?Math.round(r.amt):null,
+    memo:['명세서',r.name!==r.raw?r.name:'',r.unit!=='kg'?`${r.qty}${r.unit}${r.price!=null?'×'+won(r.price):''} (1${r.unit}=${r.pack}kg)`:''].filter(Boolean).join(' · ')}));
+  $('st-save').disabled=true; let rows;
+  try{ rows=await must(sb.from('raw_moves').insert(ins).select()); }catch(e){ $('st-save').disabled=false; return; }
+  rows.forEach(row=>db.raws.push({...row, qty:Number(row.qty), amt:Number(row.amt)||0}));
+  // 기억: 고친 원료 이름(raw_alias)·새로 넣은 1단위 kg(raw_pack). 다른 PC가 바꾼 값을 덮지 않도록 최신값을 다시 읽어 합친다.
+  const al={}, pk={}; pick.forEach(r=>{ if(r.by==='직접'||r.by==='비슷한 이름') al[r.name]=r.raw; if(r.unit!=='kg' && r.pack && r.pack!==rawPack(r.raw,r.unit)) (pk[r.raw] ||= {})[r.unit]=r.pack; });
+  try{
+    if(Object.keys(al).length){ const f=await must(sb.from('settings').select('value').eq('key','raw_alias').maybeSingle()); const all={...(f?.value||{}),...al};
+      await must(sb.from('settings').upsert({key:'raw_alias',value:all,updated_at:new Date().toISOString()})); db.rawAlias=all; }
+    if(Object.keys(pk).length){ const f=await must(sb.from('settings').select('value').eq('key','raw_pack').maybeSingle()); const all={...(f?.value||db.rawPack||RAW_PACK_DEFAULT)};
+      Object.entries(pk).forEach(([k,v])=>all[k]={...(all[k]||{}),...v}); await must(sb.from('settings').upsert({key:'raw_pack',value:all,updated_at:new Date().toISOString()})); db.rawPack=all; }
+  }catch(e){ alert('입고는 저장됐지만 이름·단위 기억은 저장하지 못했습니다. 다음에 다시 고르면 됩니다.'); }
+  $('st-msg').innerHTML=`<b>${rows.length}줄 입고 저장 완료</b> (${stmt.date} ${customerEscape(sup)})`; stmt=null; $('st-text').value=''; renderStmt(); renderRaw(); };
 $('rb-print').onclick = ()=>{ renderRaw(); $('print').innerHTML = `<div style="font-size:12px"><h2 style="text-align:center">원 료 수 불 부</h2><p>${$('rb-from').value||'처음'} ~ ${$('rb-to').value||'오늘'}</p>${$('rb-body').innerHTML}</div>`; setTimeout(()=>window.print(),50); };
 
 /* ── 설정·백업 ── */
