@@ -275,6 +275,11 @@ td input{padding:4px 6px}
       <div style="max-width:160px"><label>끝</label><input type="date" id="pl-to"></div>
       <div style="flex:0"><button class="btn" id="pl-print">생산일지 출력</button></div>
     </div>
+    <div class="row">
+      <div style="max-width:160px"><label>월별 생산실적(법정 양식)</label><input type="month" id="pl-mon"></div>
+      <div style="flex:0"><button class="btn" id="pl-month">월별 생산실적 출력</button></div>
+      <div style="flex:0"><button class="btn" id="pl-csv">엑셀(CSV) 저장</button></div>
+    </div>
     <div class="wrap" style="margin-top:10px"><table id="pl-table"><thead><tr><th>생산일</th><th>번호</th><th>품목</th><th class="n">생산량 kg</th><th>투입 원료</th><th>메모</th><th></th></tr></thead><tbody></tbody></table></div>
     <p>합계 <span class="tot" id="pl-total">0</span> kg <span class="mut" id="pl-cnt"></span></p>
   </div>
@@ -368,7 +373,7 @@ async function load(){
     sb.from('customers').select('*').order('code'),
     sb.from('slips').select('*').order('date').range(0, 49999),
     sb.from('pays').select('*').order('date').range(0, 49999),
-    sb.from('settings').select('key,value').in('key',['recipes','prod_alias','raw_conv','loss','ship_rules','pay_alias','opening_date','raw_pack','raw_alias']),
+    sb.from('settings').select('key,value').in('key',['recipes','prod_alias','raw_conv','loss','ship_rules','pay_alias','opening_date','raw_pack','raw_alias','plog_rows']),
     sb.from('prods').select('*').order('date').range(0, 49999),
     sb.from('raw_moves').select('*').order('date').range(0, 49999),
     sb.from('orders').select('*').order('date').range(0, 49999),
@@ -378,7 +383,7 @@ async function load(){
   const S = Object.fromEntries(st.data.map(r=>[r.key, r.value]));
   db = {me: me.data?.value || {}, customers: cs.data.map(c=>({...c, opening:Number(c.opening)||0, items:c.items||[]})),
         slips: sl.data.map(x=>({...x, total:Number(x.total)})), pays: py.data.map(x=>({...x, amt:Number(x.amt)})),
-        orders: od.data, rawPack: S.raw_pack || null, rawAlias: S.raw_alias || {}, openingDate: S.opening_date || null, payAlias: S.pay_alias || {}, shipRules: S.ship_rules || {}, recipes: S.recipes || {}, prodAlias: S.prod_alias || {}, rawConv: S.raw_conv || {}, loss: Number(S.loss) || 1.09,
+        orders: od.data, rawPack: S.raw_pack || null, rawAlias: S.raw_alias || {}, plogRows: S.plog_rows || null, openingDate: S.opening_date || null, payAlias: S.pay_alias || {}, shipRules: S.ship_rules || {}, recipes: S.recipes || {}, prodAlias: S.prod_alias || {}, rawConv: S.raw_conv || {}, loss: Number(S.loss) || 1.09,
         prods: pr.data.map(x=>({...x, kg:Number(x.kg)})), raws: rw.data.map(x=>({...x, qty:Number(x.qty), amt:Number(x.amt)||0})),
         onlineDays: ol.error ? [] : (ol.data||[])};   // 취합기가 올리는 온라인 하루 요약(없어도 장부는 돈다)
 }
@@ -1494,6 +1499,26 @@ function renderProd(){
 }
 $('pl-table').onclick = async e=>{ const c=e.target.dataset.c;
   if(c && confirm('이 생산 기록을 취소할까요? (지우지 않고 「취소」로 남기고, 원료 사용도 되돌립니다)')){ const t=new Date().toISOString(); await must(sb.from('prods').update({canceled:t}).eq('id',c)); db.prods.find(p=>p.id===c).canceled=t; renderProd(); } };
+/* 월별 생산실적표(품목 × 날짜) — QC 「생산일지」 엑셀과 같은 모양. 값 = 생산량 × 로스계수(QC 방식).
+   줄 이름·순서는 settings 「plog_rows」 = [[줄 이름, [배합비 이름…]], …] (회사마다 다름). 없으면 배합비 이름 그대로. */
+function plogMonth(mon){
+  const [y,m]=mon.split('-').map(Number), last=new Date(y,m,0).getDate(), rows=[], idx={};
+  (db.plogRows||[]).forEach(([label,names])=>{ idx[label]=rows.length; rows.push({label,v:{}}); (names||[]).forEach(n=>idx['\u0001'+n]=idx[label]); });
+  db.prods.filter(p=>!p.canceled && p.date.startsWith(mon)).forEach(p=>{
+    let i=idx['\u0001'+p.product]; if(i===undefined){ i=idx[p.product]; if(i===undefined){ i=idx[p.product]=rows.length; rows.push({label:p.product,v:{}}); } }
+    const d=+p.date.slice(8), q=Number(p.kg)*db.loss; rows[i].v[d]=(rows[i].v[d]||0)+q; });
+  rows.forEach(r=>r.sum=Object.values(r.v).reduce((a,b)=>a+b,0));
+  return {y,m,last,rows};
+}
+const r1 = n => n ? (Math.round(n*10)/10).toLocaleString('ko-KR',{maximumFractionDigits:1}) : '';
+$('pl-month').onclick = ()=>{ const mon=$('pl-mon').value||today().slice(0,7), t=plogMonth(mon), ds=[...Array(t.last)].map((_,i)=>i+1);
+  $('print').innerHTML = `<div style="font-size:9px"><h2 style="text-align:center">${t.y}년 ${t.m}월 생산실적</h2><p>${customerEscape(db.me.name||'')} · 단위 kg (생산량 × ${db.loss})</p>
+    <table class="slip" style="height:auto;display:table;width:100%"><tr><th>구분</th><th>합계</th>${ds.map(d=>`<th>${d}</th>`).join('')}</tr>
+    ${t.rows.map(r=>`<tr><td>${customerEscape(r.label)}</td><td style="text-align:right">${r1(r.sum)}</td>${ds.map(d=>`<td style="text-align:right">${r1(r.v[d])}</td>`).join('')}</tr>`).join('')}</table></div>`;
+  setTimeout(()=>window.print(),50); };
+$('pl-csv').onclick = ()=>{ const mon=$('pl-mon').value||today().slice(0,7), t=plogMonth(mon), ds=[...Array(t.last)].map((_,i)=>i+1);
+  const q=v=>'"'+String(v).replace(/"/g,'""')+'"', lines=[[`${t.y}년 ${t.m}월 생산실적`],[],['구분','합계',...ds],...t.rows.map(r=>[r.label, Math.round(r.sum*10)/10, ...ds.map(d=>r.v[d]?Math.round(r.v[d]*10)/10:'')])].map(l=>l.map(q).join(','));
+  const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob(['\ufeff'+lines.join('\r\n')],{type:'text/csv'})); a.download='생산실적_'+mon+'.csv'; a.click(); };
 $('pl-print').onclick = ()=>{ const rows=prodRows().filter(p=>!p.canceled).reverse(); const by={}; rows.forEach(p=>(by[p.date] ||= []).push(p));
   $('print').innerHTML = Object.entries(by).map(([d,ps])=>`<div style="page-break-after:always;font-size:12px"><h2 style="text-align:center">생 산 일 지</h2><p>생산일 ${d} · ${db.me.name||''}</p>
     <table class="slip" style="height:auto;display:table;width:100%"><tr><th>품목</th><th>생산량(kg)</th><th>투입 원료(kg)</th><th>메모</th></tr>
