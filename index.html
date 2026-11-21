@@ -250,7 +250,7 @@ td input{padding:4px 6px}
   </div>
   <div class="card">
     <h2>하루 마감 <span class="mut">(그날 최종 생산량 = 온라인 + B2B 명세서 + 샘플·재발송·지인출고 등)</span></h2>
-    <p class="mut">위 「생산일」 날짜로 계산합니다. 수입(사입) 품목과 배합비가 없는 품목(젓갈·장아찌 등)은 생산에서 빼고 따로 보여 드립니다.</p>
+    <p class="mut">위 「생산일」 날짜로 계산합니다. 수입(사입) 품목은 빼고, 배합비가 없어도 생산일지 줄이 있는 품목(젓갈류 등)은 원료 차감 없이 생산일지에만 기록합니다. 그 밖의 배합비 없는 품목은 따로 보여 드립니다.</p>
     <label>① 온라인 — 아래 버튼으로 자동 채우기, 또는 출고기록 엑셀(업무도구/출고기록/연도/날짜.xlsx) 「품목별 합계」 시트에서 품목~총 kg 칸을 복사해 붙여넣기</label>
     <textarea id="pc-online" rows="4" placeholder="품목	규격	수량(개)	총 중량(kg) …"></textarea>
     <label style="margin-top:8px">② 기타 출고 — 한 줄에 「구분 품목 kg」 (구분: 샘플·재발송·지인출고·증정·시식·기타)</label>
@@ -1366,6 +1366,11 @@ let plines = [];
 
 /* ── 하루 마감: 그날 최종 생산량 = 온라인(취합기 품목별 합계) + B2B 명세서 + 기타 출고(샘플·재발송·지인출고 …) ── */
 const CLOSE_KINDS = ['샘플','재발송','지인출고','증정','시식','기타'];
+// 배합비는 없지만 생산일지에는 적어야 하는 품목(젓갈류 등) = settings 「plog_rows」에서 배합비 목록이 빈 줄. 이름에 줄 이름이 들어 있으면 그 줄(긴 이름 먼저).
+function plogOnly(name){
+  const w=String(name??'').replace(/\s/g,''); if(!w) return null;
+  return (db.plogRows||[]).filter(([label,names])=>!(names||[]).length && w.includes(label)).map(([label])=>label).sort((a,b)=>b.length-a.length)[0] || null;
+}
 // 판매 이름 → 배합비 이름. 「매콤 배추김치」처럼 끝의 「김치」를 빼야 맞는 이름도 찾는다. 하나로 안 정해지면 null.
 function closeRecipe(name){
   const w = String(name??'').replace(/\(수입\)|\(국산\)/g,'').replace(/\d+(?:\.\d+)?\s*(키로|킬로|kg|KG|Kg|그람|g)/g,'').replace(/\s/g,'');
@@ -1409,7 +1414,7 @@ function closeTotals(online, b2b, etc){
   const add=(src, r)=>{
     const label=`${r.name}${r.spec?' '+r.spec:''}`;
     if(/\(수입\)/.test(r.name)) return imported.push(`${label} ${kg3(r.kg)}kg`);
-    const p=closeRecipe(r.name); if(!p) return noRecipe.push(`${label} ${kg3(r.kg)}kg`);
+    const p=closeRecipe(r.name) || plogOnly(r.name); if(!p) return noRecipe.push(`${label} ${kg3(r.kg)}kg`);
     const t=by[p] ||= {product:p, kg:0, src:{}}; t.kg+=r.kg; t.src[src]=(t.src[src]||0)+r.kg;
   };
   online.forEach(r=>add('온라인',r)); b2b.forEach(r=>add('B2B',r)); etc.forEach(r=>add(r.kind,r));
@@ -1445,9 +1450,9 @@ $('pc-fill').onclick = ()=>{
 };
 function drawProd(){
   $('pr-table').tBodies[0].innerHTML = plines.map((l,i)=>{ const us=l._kgText!==undefined?null:usesFor(l.product,l.kg);
-    return `<tr><td><input data-pi="${i}" data-k="product" value="${String(l.product??'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;')}" list="recipelist" style="${us?'':'color:var(--wine);font-weight:bold'}"></td>
+    return `<tr><td><input data-pi="${i}" data-k="product" value="${String(l.product??'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;')}" list="recipelist" style="${us||plogOnly(l.product)===l.product?'':'color:var(--wine);font-weight:bold'}"></td>
       <td class="n"><input data-pi="${i}" data-k="kg" value="${String(l._kgText??l.kg).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;')}" inputmode="decimal" style="width:90px;text-align:right"></td>
-      <td style="white-space:normal;font-size:12px">${l._kgText!==undefined?'수량 확인':us?usesText(us):'<b style="color:var(--wine)">배합비 없음 — 목록에서 품목을 고르세요</b>'}</td>
+      <td style="white-space:normal;font-size:12px">${l._kgText!==undefined?'수량 확인':us?usesText(us):plogOnly(l.product)===l.product?'<span class="mut">원료 차감 없음 — 생산일지에만 기록</span>':'<b style="color:var(--wine)">배합비 없음 — 목록에서 품목을 고르세요</b>'}</td>
       <td><button class="btn warn" data-pdel="${i}">×</button></td></tr>`; }).join('') || '<tr><td colspan="4" class="mut">붙여넣기나 빈 줄 추가로 생산 품목을 넣으세요.</td></tr>';
 }
 $('pr-read').onclick = ()=>{ const t=$('pr-paste').value; if(!t.trim()) return;
@@ -1475,12 +1480,12 @@ $('pr-save').onclick = async ()=>{
   if(plines.some(l=>l._kgText!==undefined || !Number.isFinite(l.kg))) return alert('잘못된 수량을 먼저 수정하세요.');
   if(plines.some(l=>l.kg<=0 || !l.product.trim())) return alert('생산 품목과 0보다 큰 수량을 확인하세요. 저장에서 제외될 행을 먼저 수정하거나 삭제하세요.');
   const ls = plines; if(!ls.length) return alert('생산 품목을 넣으세요.');
-  const bad = ls.filter(l=>!db.recipes[l.product]); if(bad.length) return alert('배합비가 없는 품목이 있습니다: '+bad.map(l=>l.product).join(', '));
+  const bad = ls.filter(l=>!db.recipes[l.product] && plogOnly(l.product)!==l.product); if(bad.length) return alert('배합비가 없는 품목이 있습니다: '+bad.map(l=>l.product).join(', '));
   const inputSnapshot=JSON.stringify([plines,...['pr-date','pr-memo','pr-paste'].map(id=>$(id).value)]);
   const d=$('pr-date').value||today();
   if(ls.some(l=>l.src) && db.prods.some(p=>p.date===d && !p.canceled && p.source==='마감') && !confirm(`${d}에 이미 마감 생산이 저장돼 있습니다. 또 저장하면 원료가 두 번 차감됩니다.\n\n정말 추가로 저장할까요?`)) return;
   $('pr-save').disabled=true;
-  try{ const rows = await must(sb.from('prods').insert(ls.map(l=>({date:d, product:l.product, kg:l.kg, loss:db.loss, uses:usesFor(l.product,l.kg), source:l.src?'마감':'직접', memo:[l.src?srcText(l.src):'', $('pr-memo').value].filter(Boolean).join(' / ')}))).select());
+  try{ const rows = await must(sb.from('prods').insert(ls.map(l=>({date:d, product:l.product, kg:l.kg, loss:db.loss, uses:usesFor(l.product,l.kg)||[], source:l.src?'마감':'직접', memo:[l.src?srcText(l.src):'', $('pr-memo').value].filter(Boolean).join(' / ')}))).select());
     rows.forEach(r=>db.prods.push({...r, kg:Number(r.kg)})); }
   finally{ $('pr-save').disabled=false; }
   if(inputSnapshot===JSON.stringify([plines,...['pr-date','pr-memo','pr-paste'].map(id=>$(id).value)])){
