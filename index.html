@@ -1452,6 +1452,7 @@ const srcText = src => '마감: '+Object.entries(src).filter(([k])=>k!=='수정'
 let pcFillBasis = null;                                   // 마감 합계를 낸 미리보기 스냅숏 {day, basis}
 $('pc-fill').onclick = async ()=>{
   const d=$('pr-date').value||today();
+  if(dcs && !(await dcFreshMode())){ drawClose(); return alert(DC_STALE_MSG); }
   pcFillBasis = null;
   if(dcs && (db.closeMode==='enforced' || db.closeMode==='hold')){ dcNote=''; await dcRefresh();
     if(!dcs.preview || dcs.preview.day!==d) return alert('마감 미리보기를 불러오지 못해 합계를 계산하지 않았습니다. 연결을 확인하고 다시 누르세요.'); }
@@ -1464,7 +1465,7 @@ $('pc-fill').onclick = async ()=>{
   const done=db.prods.filter(p=>p.date===d && !p.canceled && p.source==='마감');
   $('pc-body').innerHTML = `<p>${d} 마감: 생산 <b>${plines.length}</b>품목, 합계 <b>${kg3(plines.reduce((a,l)=>a+l.kg,0))}</b> kg
       (온라인 ${on.rows.length}줄 · B2B 명세서 ${bb.rows.length}줄 · 기타 ${et.rows.length}줄). 아래 표에서 확인하고 ${db.closeMode==='enforced'?'아래 「마감 저장」':'「생산 저장」'}을 누르세요.</p>`
-    + (done.length?(db.closeMode==='enforced'?`<p style="color:var(--wine)"><b>이 날짜에 이미 마감 생산 ${done.length}건이 있습니다.</b> 「마감 저장」을 다시 하면 기존 마감 생산을 새 내용으로 바꿉니다(두 번 차감되지 않음).</p>`:`<p style="color:var(--wine)"><b>이 날짜에 이미 마감 생산 ${done.length}건이 저장돼 있습니다.</b> 다시 저장하면 두 번 차감됩니다 — 생산일지에서 먼저 취소하세요.</p>`):'')
+    + (done.length?(db.closeMode==='enforced'?(dcLegacyDay(d)?`<p style="color:var(--wine)">${DC_LEGACY_MSG}</p>`:`<p style="color:var(--wine)"><b>이 날짜에 이미 마감 생산 ${done.length}건이 있습니다.</b> 「마감 저장」을 다시 하면 기존 마감 생산을 새 내용으로 바꿉니다(두 번 차감되지 않음).</p>`):`<p style="color:var(--wine)"><b>이 날짜에 이미 마감 생산 ${done.length}건이 저장돼 있습니다.</b> 다시 저장하면 두 번 차감됩니다 — 생산일지에서 먼저 취소하세요.</p>`):'')
     + (r.imported.length?`<p class="mut">수입(사입)이라 생산에서 뺀 것: ${customerEscape(r.imported.join(', '))}</p>`:'')
     + (r.noRecipe.length?`<p style="color:var(--wine)">배합비가 없어 뺀 것(생산품이면 아래 표에 직접 추가): ${customerEscape(r.noRecipe.join(', '))}</p>`:'')
     + (bb.noKg.length?`<p style="color:var(--wine)">무게를 못 읽은 B2B 줄(직접 확인): ${customerEscape(bb.noKg.join(', '))}</p>`:'')
@@ -1475,6 +1476,16 @@ $('pc-fill').onclick = async ()=>{
    쓰기는 모드가 enforced일 때만 켜진다(compat = 옛 방식 「생산 저장」, hold = 막힘). 토큰은 쓰지 않는다. ── */
 let dcs = null;                                     // 로그인 뒤 만든다(사용자별 미확정 요청)
 let dcNote = '';                                    // 마지막 동작의 안내(화면을 다시 그려도 남김, 다음 동작 때 지움)
+let dcModeStale = null;                             // 서버 모드가 이 탭이 처음 읽은 모드와 다름 = 새로고침 전까지 두 저장 모두 막음(입력·미확정 요청은 보존)
+const DC_STALE_MSG = '마감 저장 방식(모드)이 바뀌었습니다 — 화면을 새로고침(F5)한 뒤 다시 하세요. 입력한 생산 줄은 저장하지 않았습니다.';
+// 레거시 날 = 마감 기록 없이(기대 버전 0) 옛 방식 마감 생산만 있는 날. 서버는 같은 내용이면 「증거만」, 다르면 자동 교체를 거부한다.
+const DC_LEGACY_MSG = '<b>이 날짜는 옛 방식으로 저장된 마감 생산이 있습니다(마감 기록 없음).</b> 같은 내용으로 「마감 저장」하면 기록만 남고 생산·원료는 그대로입니다. 내용이 다르면 자동으로 바꾸지 않고 저장이 거부됩니다 — 그때는 담당자(관리자)에게 확인하세요.';
+function dcLegacyDay(day){ const p=dcs && dcs.preview && dcs.preview.day===day ? dcs.preview : null; return !!(p && p.expected_close_version===0 && p.close_bundle.length>0); }
+function dcCheckMode(mode){ if(db && db.closeMode!==null && mode && mode!==db.closeMode) dcModeStale = mode; return !dcModeStale; }
+async function dcFreshMode(){            // 저장 직전 서버 모드를 다시 읽는다. 못 읽으면 판단하지 않음(서버가 다시 막는다)
+  if(!db || db.closeMode===null) return true;
+  const r = await sb.from('day_close_mode').select('mode').eq('id', 1).maybeSingle();
+  return r.error || !r.data ? true : dcCheckMode(r.data.mode); }
 const dcRpc = (name, args) => sb.rpc(name, args);
 const dcEsc = v => String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 function dcStore(){ try{ const t='__dc_t'; localStorage.setItem(t,'1'); localStorage.removeItem(t); return localStorage; }catch(_){ return null; } }
@@ -1497,16 +1508,19 @@ function drawClose(){
         · 지금까지 마감 <b>${p.expected_close_version}</b>번${p.last_close?` (마지막: ${dcEsc(p.last_close.kind)} · ${dcEsc(p.last_close.prod_action)})`:''}</p>`
       + (p.slips.length?`<div class="wrap"><table><thead><tr><th>번호</th><th>거래처</th><th class="n">금액</th><th></th><th>품목</th></tr></thead><tbody>${sl}</tbody></table></div>`:'<p class="mut">이 날짜 명세서 없음</p>')
       + `<p class="mut">이미 저장된 마감 생산 ${p.close_bundle.length}건${p.close_bundle.length?': '+dcEsc(p.close_bundle.map(b=>`${b.product} ${kg3(b.kg)}kg`).join(', ')):''} · 일반 직접 생산 ${p.direct_prods.length}건(마감과 별도)</p>`
+      + (p.expected_close_version===0 && p.close_bundle.length && mode!=='compat' ? `<p style="color:var(--wine)">${DC_LEGACY_MSG}</p>` : '')
       + (!p.format_ok?'<p style="color:var(--wine)"><b>명세서 형식 이상 — 마감할 수 없습니다. 관리자 확인 필요.</b></p>':'')
       + (p.pending_correction?'<p style="color:var(--wine)"><b>처리 대기 중인 생산 정정 요청이 있습니다.</b></p>':'');
   }
   $('pc-chk').checked = !!(p && dcs.listChecked); $('pc-none').checked = !!(p && dcs.b2bNone);
   $('pc-chk').disabled = !p; $('pc-none').disabled = !p || p.valid_count>0;
   const why = p ? dcs.blockReason() : null;
-  $('pc-save').disabled = !p || !!why || mode!=='enforced';
+  $('pc-save').disabled = !p || !!why || mode!=='enforced' || !!dcModeStale;
   ['pc-resend','pc-confirm','pc-discard'].forEach(id=>$(id).classList.toggle('hidden', !pend));
-  let msg='';
-  if(pend) msg = `<p style="color:var(--wine)"><b>${day} 저장 결과를 아직 모릅니다.</b> ${pend.not_found?'「저장 확인」 결과 그 시점에는 저장되지 않았습니다. 그래도 요청이 뒤늦게 처리될 수 있어 같은 내용 다시 보내기가 기본입니다. 내용을 바꿔 새로 저장하려면 「이 요청 버리기」를 누르세요.':'새로 저장하지 말고 「같은 내용 다시 보내기」나 「저장 확인」을 누르세요.'}</p>`;
+  let msg = dcModeStale ? `<p style="color:var(--wine)"><b>${dcEsc(DC_STALE_MSG)}</b></p>` : '';
+  if(pend) msg += `<p style="color:var(--wine)"><b>${day} 저장 결과를 아직 모릅니다.</b> ${pend.not_found?'「저장 확인」 결과 그 시점에는 저장되지 않았습니다. 그래도 요청이 뒤늦게 처리될 수 있어 같은 내용 다시 보내기가 기본입니다. 내용을 바꿔 새로 저장하려면 「이 요청 버리기」를 누르세요.':'새로 저장하지 말고 「같은 내용 다시 보내기」나 「저장 확인」을 누르세요.'}</p>`;
+  else if(dcModeStale) {}
+  else if(p && mode==='hold') msg = '<p style="color:var(--wine)">마감 저장이 보류 중입니다 — 관리자 확인 전까지 마감 줄은 저장하지 않습니다. 일반 직접 생산은 아래 「생산 저장」으로 저장할 수 있습니다.</p>';
   else if(p && why) msg = `<p style="color:var(--wine)">${dcEsc(why)}</p>`;
   else if(p && mode!=='enforced') msg = '<p class="mut">마감 저장 버튼은 새 방식 전환(enforced) 뒤에 켜집니다.</p>';
   if(res) msg += `<p class="mut">마지막 결과: ${dcEsc(res.status)}${res.result?` (${dcEsc(res.result.kind||'')} · ${dcEsc(res.result.prod_action||'')} · 마감 ${res.result.close_version||''}번)`:''}${res.message?' — '+dcEsc(res.message):''}</p>`;
@@ -1518,7 +1532,7 @@ function dcSyncSlips(p){            // 미리보기 스냅숏의 그날 명세�
     lines:x.lines, canceled: x.canceled ? ((old[x.id]||{}).canceled || '취소') : null})));
 }
 async function dcRefresh(){ const day=dcDay();
-  try{ const r=await DayClose.refresh(dcRpc, dcs, day); if(dcs.preview) dcSyncSlips(dcs.preview); drawClose(); return r; }
+  try{ const r=await DayClose.refresh(dcRpc, dcs, day); if(dcs.preview){ dcCheckMode(dcs.preview.mode); dcSyncSlips(dcs.preview); } drawClose(); return r; }
   catch(e){ dcNote=`<p style="color:var(--wine)">${dcEsc(e.message)}</p>`; drawClose(); } }
 async function dcReloadProds(day){ const r=await sb.from('prods').select('*').eq('date', day); if(r.error) return;
   db.prods = db.prods.filter(x=>x.date!==day).concat(r.data.map(x=>({...x, kg:Number(x.kg)}))); renderProd(); }
@@ -1533,6 +1547,7 @@ $('pr-date').addEventListener('change', ()=>{ dcNote=''; if(dcs){ dcs.clearPrevi
 $('pc-chk').onchange = e=>{ try{ dcs.checkList(e.target.checked); }catch(x){ alert(x.message); } drawClose(); };
 $('pc-none').onchange = e=>{ try{ dcs.setB2bNone(e.target.checked); }catch(x){ alert(x.message); } drawClose(); };
 $('pc-save').onclick = async ()=>{ if($('pc-save').disabled) return;
+  if(!(await dcFreshMode())){ drawClose(); return alert(DC_STALE_MSG); }
   dcNote=''; const day=dcDay(); if(!dcs.preview || dcs.preview.day!==day) return alert('날짜가 바뀌었습니다 — 미리보기를 다시 불러오세요.');
   const { close, direct } = DayClose.splitLines(plines);
   if(close.some(l=>l._kgText!==undefined || !Number.isFinite(l.kg) || l.kg<=0 || !String(l.product||'').trim())) return alert('마감 줄의 품목·수량을 먼저 확인하세요.');
@@ -1586,11 +1601,14 @@ $('pr-save').onclick = async ()=>{
   if($('pr-save').disabled) return;
   if(plines.some(l=>l._kgText!==undefined || !Number.isFinite(l.kg))) return alert('잘못된 수량을 먼저 수정하세요.');
   if(plines.some(l=>l.kg<=0 || !l.product.trim())) return alert('생산 품목과 0보다 큰 수량을 확인하세요. 저장에서 제외될 행을 먼저 수정하거나 삭제하세요.');
+  if(dcs && !(await dcFreshMode())){ drawClose(); return alert(DC_STALE_MSG); }   // 모드가 바뀐 탭: 두 저장 모두 막음(입력 보존)
   const newWay = db.closeMode==='enforced' || db.closeMode==='hold';   // 마감 생산은 「마감 저장」으로만
   const ls = newWay ? plines.filter(l=>!l.src) : plines;
   if(newWay && plines.some(l=>l.src)){
     if(!ls.length) return alert(db.closeMode==='hold' ? '마감 저장이 보류 중입니다 — 관리자에게 알리세요. (마감 줄은 저장하지 않았습니다)' : '마감 줄은 위 「마감 저장」으로 저장합니다(미리보기 → 명세서 목록 확인 → 마감 저장).');
-    if(!confirm(`일반 직접 생산 ${ls.length}줄만 저장합니다. 마감 줄 ${plines.length-ls.length}개는 위 「마감 저장」으로 따로 저장하세요.\n\n계속할까요?`)) return;
+    if(!confirm(db.closeMode==='hold'
+      ? `마감 저장이 보류 중입니다. 일반 직접 생산 ${ls.length}줄만 저장하고, 마감 줄 ${plines.length-ls.length}개는 저장하지 않고 화면에 남겨 둡니다(관리자 확인 뒤 처리).\n\n계속할까요?`
+      : `일반 직접 생산 ${ls.length}줄만 저장합니다. 마감 줄 ${plines.length-ls.length}개는 위 「마감 저장」으로 따로 저장하세요.\n\n계속할까요?`)) return;
   }
   if(!ls.length) return alert('생산 품목을 넣으세요.');
   const bad = ls.filter(l=>!db.recipes[l.product] && plogOnly(l.product)!==l.product); if(bad.length) return alert('배합비가 없는 품목이 있습니다: '+bad.map(l=>l.product).join(', '));
@@ -1602,7 +1620,7 @@ $('pr-save').onclick = async ()=>{
     rows.forEach(r=>db.prods.push({...r, kg:Number(r.kg)})); }
   finally{ $('pr-save').disabled=false; }
   if(inputSnapshot===JSON.stringify([plines,...['pr-date','pr-memo','pr-paste'].map(id=>$(id).value)])){
-    plines = newWay ? plines.filter(l=>!ls.includes(l)) : []; if(!plines.length) $('pr-paste').value=''; $('pr-msg').textContent='저장했습니다. 원료수불부에 바로 반영됩니다.'+(plines.length?' 남은 마감 줄은 「마감 저장」으로 저장하세요.':'');
+    plines = newWay ? plines.filter(l=>!ls.includes(l)) : []; if(!plines.length) $('pr-paste').value=''; $('pr-msg').textContent='저장했습니다. 원료수불부에 바로 반영됩니다.'+(plines.length?(db.closeMode==='hold'?` 마감 줄 ${plines.length}개는 저장하지 않았습니다(마감 저장 보류 중 — 관리자 확인 뒤 처리).`:' 남은 마감 줄은 「마감 저장」으로 저장하세요.'):'');
   } else alert('앞서 요청한 생산 기록은 저장됐습니다. 대기 중 바꾼 입력은 유지했습니다. 다음 저장 전 내용을 확인하세요.');
   drawProd(); renderProd(); };
 ['pl-from','pl-to'].forEach(id=>$(id).addEventListener('input',renderProd));
