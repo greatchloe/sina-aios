@@ -51,6 +51,7 @@ td input{padding:4px 6px}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="day_close.js"></script>
+<script src="purchase.js"></script>
 </head>
 <body>
 <div class="login" id="login"><div class="card">
@@ -73,6 +74,7 @@ td input{padding:4px 6px}
     <button data-v="ar">미수금 현황</button>
     <button data-v="cust">거래처·단가</button>
     <button data-v="prod">생산일지</button>
+    <button data-v="pur">매입</button>
     <button data-v="raw">원료수불부</button>
     <button data-v="set">설정·백업</button>
   </nav>
@@ -300,6 +302,63 @@ td input{padding:4px 6px}
   </div>
 </section>
 
+<!-- 매입 (M1 후보: 매입처·매입 명세서·나중 입고·취소·매입장. 저장은 서버 함수로만) -->
+<section id="v-pur" class="hidden">
+  <div class="card" id="pu-pend-card" style="border-color:var(--wine)" hidden>
+    <h2 style="color:var(--wine)">앞서 보낸 매입 저장의 결과를 모릅니다</h2>
+    <p id="pu-pend-msg"></p>
+    <div class="row"><div style="flex:0"><button class="btn pri" id="pu-resend">같은 내용 다시 보내기</button></div>
+      <div style="flex:0"><button class="btn warn" id="pu-discard">버리기(매입장에서 확인한 뒤)</button></div></div>
+    <p class="mut">같은 요청 번호로 다시 보내면 이미 저장됐어도 두 번 저장되지 않습니다.</p>
+  </div>
+  <div class="card">
+    <h2>매입 입력 <span class="mut">(업체 거래명세서 한 장 = 매입 1건)</span></h2>
+    <div class="row">
+      <div style="max-width:160px"><label>전표일(매입 날짜)</label><input type="date" id="pu-date"></div>
+      <div><label>매입처</label><select id="pu-sup"></select></div>
+      <div style="max-width:160px"><label>업체 전표번호(있으면)</label><input id="pu-docno"></div>
+      <div style="max-width:170px"><label>증빙 합계(부가세 포함, 없으면 비움)</label><input id="pu-total" inputmode="numeric"></div>
+      <div><label>메모</label><input id="pu-memo"></div>
+    </div>
+    <details style="margin-top:8px"><summary class="mut">매입처 등록·이름 고치기</summary>
+      <div class="row" style="margin-top:6px">
+        <div style="max-width:140px"><label>코드(영문·숫자)</label><input id="pu-sc"></div>
+        <div><label>이름</label><input id="pu-sn"></div>
+        <div style="flex:0"><button class="btn" id="pu-sadd">매입처 저장</button></div>
+      </div><p class="mut" id="pu-smsg"></p></details>
+    <details style="margin-top:6px"><summary class="mut">명세서 글 붙여넣기로 줄 채우기(문자·카톡·엑셀 복사)</summary>
+      <textarea id="pu-text" rows="5" style="margin-top:6px" placeholder="예)&#10;열무 30단 4,000 120,000&#10;양파 5망 24- 120-&#10;택배비 1 4000 4000"></textarea>
+      <div class="row"><div style="flex:0"><button class="btn" id="pu-read">읽어서 줄 채우기</button></div></div>
+      <p class="mut" id="pu-rmsg"></p></details>
+    <div class="wrap" style="margin-top:8px"><table id="pu-lines"><thead><tr><th>#</th><th>구분</th><th>품목</th><th>규격</th><th>단위</th><th class="n">수량</th><th class="n">단가(모르면 비움)</th><th class="n">금액</th><th>과세</th><th class="n">부가세(모르면 비움)</th><th>원료</th><th class="n">입고 kg</th><th>지금 입고</th><th>입고일</th><th>같은 입고가 있을 때</th><th></th></tr></thead><tbody></tbody></table></div>
+    <div class="row" style="margin-top:8px">
+      <div style="flex:0"><button class="btn" id="pu-add">빈 줄 추가</button></div>
+      <div style="flex:0"><button class="btn" id="pu-clear">새로 쓰기</button></div>
+      <div style="flex:0"><button class="btn" id="pu-review">검토</button></div>
+      <div style="flex:0"><button class="btn pri" id="pu-save" disabled>매입 저장</button></div>
+    </div>
+    <div id="pu-rv" style="margin-top:8px"></div>
+    <p class="mut">「지금 입고」는 처음에 모두 꺼져 있습니다. 실제로 들어온 날·원료·kg를 확인한 줄만 직접 켜세요 — 켠 줄만 원료수불부에 들어가고, 나머지 원료 줄은 「미반영」으로 남아 아래에서 나중에 연결합니다.</p>
+  </div>
+  <div class="card">
+    <h2>미반영 원료 줄 <span class="mut">(매입은 저장됐지만 원료수불부에 아직 안 들어간 줄)</span></h2>
+    <div class="wrap"><table id="pu-pend"><thead><tr><th>전표일</th><th>매입번호</th><th>매입처</th><th>품목</th><th class="n">수량</th><th class="n">금액</th><th>입고일</th><th>원료</th><th class="n">입고 kg</th><th>같은 입고가 있을 때</th><th></th></tr></thead><tbody></tbody></table></div>
+  </div>
+  <div class="card">
+    <h2>매입장</h2>
+    <div class="row">
+      <div style="max-width:160px"><label>시작</label><input type="date" id="pu-from"></div>
+      <div style="max-width:160px"><label>끝</label><input type="date" id="pu-to"></div>
+      <div><label>매입처</label><select id="pu-fsup"></select></div>
+      <div style="max-width:140px"><label>구분</label><select id="pu-fcat"><option value="">전체</option><option>원료</option><option>사입상품</option><option>포장재</option><option>운송비</option><option>기타</option></select></div>
+      <div style="max-width:120px"><label>취소 포함</label><input type="checkbox" id="pu-fcan" style="width:auto"></div>
+      <div style="flex:0"><button class="btn" id="pu-csv">엑셀(CSV) 저장</button></div>
+    </div>
+    <p id="pu-sum" style="margin-top:8px"></p>
+    <div class="wrap"><table id="pu-ledger"><thead><tr><th>전표일</th><th>매입번호</th><th>매입처</th><th>#</th><th>구분</th><th>품목</th><th class="n">수량</th><th>단위</th><th class="n">단가</th><th class="n">공급가</th><th>과세</th><th class="n">부가세</th><th>원료수불</th><th>합계확인</th><th></th></tr></thead><tbody></tbody></table></div>
+  </div>
+</section>
+
 <!-- 원료수불부 -->
 <section id="v-raw" class="hidden">
   <div class="card">
@@ -321,6 +380,7 @@ td input{padding:4px 6px}
   </div>
   <div class="card">
     <h2>거래명세서 붙여넣기 <span class="mut">(문자·카톡·엑셀 복사 → 원료 입고)</span></h2>
+    <p style="color:var(--wine);margin:0 0 6px">업체 매입 명세서는 「매입」 탭에서 넣으세요(매입장·원료 입고가 함께 남습니다). 여기서 넣은 입고는 매입장에 남지 않으며, 같은 매입을 매입 탭에서 다시 넣으면 「같은 날 같은 원료·kg 입고」 확인이 뜹니다 — 그때는 이 입고에 「연결」을 고르세요.</p>
     <textarea id="st-text" rows="6" placeholder="예)&#10;○○상회 10/14&#10;열무 30단 4,000 120,000&#10;알타리 50 6000 300000&#10;양파 5망 24- 120-&#10;합계 540,000"></textarea>
     <div class="row">
       <div style="max-width:160px"><label>날짜(글에 없을 때)</label><input type="date" id="st-date"></div>
@@ -382,7 +442,7 @@ const today = () => new Date(Date.now()-new Date().getTimezoneOffset()*60000).to
 const $ = id => document.getElementById(id);
 let db;
 async function load(){
-  const [me, al, cs, sl, py, st, pr, rw, od, ol, dm] = await Promise.all([
+  const [me, al, cs, sl, py, st, pr, rw, od, ol, dm, pus, pud, pul] = await Promise.all([
     sb.from('settings').select('value').eq('key','me').maybeSingle(),
     sb.from('settings').select('value').eq('key','cust_alias').maybeSingle(),
     sb.from('customers').select('*').order('code'),
@@ -393,7 +453,8 @@ async function load(){
     sb.from('raw_moves').select('*').order('date').range(0, 49999),
     sb.from('orders').select('*').order('date').range(0, 49999),
     sb.from('online_days').select('*').order('day').range(0, 9999),
-    sb.from('day_close_mode').select('mode').eq('id', 1).maybeSingle()]);
+    sb.from('day_close_mode').select('mode').eq('id', 1).maybeSingle(),
+    ...purQueries()]);
   const err = [me,al,cs,sl,py,st,pr,rw,od].find(r=>r.error); if(err) throw err.error;
   CUST_ALIAS = al.data?.value || {};
   const S = Object.fromEntries(st.data.map(r=>[r.key, r.value]));
@@ -402,7 +463,8 @@ async function load(){
         orders: od.data, rawPack: S.raw_pack || null, rawAlias: S.raw_alias || {}, plogRows: S.plog_rows || null, openingDate: S.opening_date || null, payAlias: S.pay_alias || {}, shipRules: S.ship_rules || {}, recipes: S.recipes || {}, prodAlias: S.prod_alias || {}, rawConv: S.raw_conv || {}, loss: Number(S.loss) || 1.09,
         prods: pr.data.map(x=>({...x, kg:Number(x.kg)})), raws: rw.data.map(x=>({...x, qty:Number(x.qty), amt:Number(x.amt)||0})),
         onlineDays: ol.error ? [] : (ol.data||[]),
-        closeMode: dm.error ? null : (dm.data?.mode || null)};   // 하루 마감 쓰기 모드(compat·enforced·hold). 표가 없으면 null = 옛 방식만   // 취합기가 올리는 온라인 하루 요약(없어도 장부는 돈다)
+        closeMode: dm.error ? null : (dm.data?.mode || null),
+        pur: purData(pus, pud, pul)};   // 하루 마감 쓰기 모드(compat·enforced·hold). 표가 없으면 null = 옛 방식만   // 취합기가 올리는 온라인 하루 요약(없어도 장부는 돈다)
 }
 async function must(q){ const r = await q; if(r.error){ alert('저장 실패: '+r.error.message); throw r.error; } return r.data; }
 const cust = code => db.customers.find(c=>c.code===code);
@@ -420,7 +482,7 @@ function fillList(){ $('custlist').innerHTML = db.customers.map(c=>`<option valu
 $('nav').onclick = e=>{ const v=e.target.dataset.v; if(!v) return;
   document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));
   document.querySelectorAll('main>section').forEach(s=>s.classList.toggle('hidden',s.id!=='v-'+v));
-  ({orders:renderOrders,sales:renderSales,ledger:renderLedger,pay:renderPays,ar:renderAR,cust:renderCust,prod:renderProd,raw:renderRaw,set:renderSet}[v]||(()=>{}))(); };
+  ({orders:renderOrders,sales:renderSales,ledger:renderLedger,pay:renderPays,ar:renderAR,cust:renderCust,prod:renderProd,pur:renderPur,raw:renderRaw,set:renderSet}[v]||(()=>{}))(); };
 
 /* ── 거래명세서 ── */
 let cur = null, lines = [];
@@ -1700,7 +1762,7 @@ function renderRaw(){
       + '</tbody></table></div><p class="mut">기록 증감합계는 실제 재고가 아닙니다. 기초 미등록은 재고 0을 뜻하지 않습니다. 기초 기록이 있어도 기준일·누락·중복·실사 대조가 필요합니다.</p>';
   }
   $('rw-table').tBodies[0].innerHTML = db.raws.slice().reverse().slice(0,100).map(r=>`<tr class="${r.canceled?'cancel':''}"><td>${r.date}</td><td>${r.kind}</td><td>${r.raw}</td><td class="n">${kg3(r.qty)} ${r.unit||''}</td><td>${r.supplier||''}</td><td class="n">${r.amt?won(r.amt):''}</td><td>${r.memo||''}</td>
-    <td>${r.canceled?'':`<button class="btn warn" data-c="${r.id}">취소</button>`}</td></tr>`).join('') || '<tr><td colspan="8" class="mut">입고 기록이 없습니다.</td></tr>';
+    <td>${r.canceled?'':r.purchase_line_id?'<span class="mut">매입 연결(매입 화면에서 취소)</span>':`<button class="btn warn" data-c="${r.id}">취소</button>`}</td></tr>`).join('') || '<tr><td colspan="8" class="mut">입고 기록이 없습니다.</td></tr>';
 }
 // Raw-material entry is explicitly kg. No conversion or rounding here.
 function parseRawQuantityKg(value){
@@ -1871,6 +1933,160 @@ $('st-save').onclick=async ()=>{ if(!stmt || $('st-save').disabled) return; cons
   }catch(e){ alert('입고는 저장됐지만 이름·단위 기억은 저장하지 못했습니다. 다음에 다시 고르면 됩니다.'); }
   $('st-msg').innerHTML=`<b>${rows.length}줄 입고 저장 완료</b> (${stmt.date} ${customerEscape(sup)})`; stmt=null; $('st-text').value=''; renderStmt(); renderRaw(); };
 $('rb-print').onclick = ()=>{ renderRaw(); $('print').innerHTML = `<div style="font-size:12px"><h2 style="text-align:center">원 료 수 불 부</h2><p>${$('rb-from').value||'처음'} ~ ${$('rb-to').value||'오늘'}</p>${$('rb-body').innerHTML}</div>`; setTimeout(()=>window.print(),50); };
+
+/* ── 매입 (M1 후보, 규칙은 purchase.js) ──
+   저장·입고 연결·취소·매입처는 서버 함수(save_purchase·receive_purchase_line·cancel_purchase·upsert_supplier)로만. 표 직접 쓰기 없음. */
+function purQueries(){ return [sb.from('suppliers').select('*').order('code'), sb.from('purchase_docs').select('*').order('date').range(0, 49999),
+  sb.from('purchase_lines').select('*').order('id').range(0, 199999)]; }
+function purData(s, d, l){ const e=[s,d,l].find(r=>r.error); return e ? {off:true, err:e.error.message, sups:[], docs:[], lines:[]} : {off:false, sups:s.data||[], docs:d.data||[], lines:l.data||[]}; }
+async function reloadPur(){ const [s,d,l,rw]=await Promise.all([...purQueries(), sb.from('raw_moves').select('*').order('date').range(0, 49999)]);
+  db.pur=purData(s,d,l); if(!rw.error) db.raws=rw.data.map(x=>({...x, qty:Number(x.qty), amt:Number(x.amt)||0})); }
+let purSaver=null, purDraft=null, purReviewed=null;
+const purStore=()=>{ try{ return window.localStorage; }catch(e){ return null; } };
+function purNewDraft(){ purDraft={date:today(), sup_code:'', src_doc_no:'', doc_total:'', memo:'', lines:[Purchase.blankLine(today())]}; purReviewed=null; }
+function purRpc(name, args){ return sb.rpc(name, args); }
+function purSupName(code){ return db.pur.sups.find(s=>s.code===code)?.name || code; }
+function purCands(date, raw, kg){ const k=Purchase.num(kg); return date && raw && k>0 ? Purchase.similarMoves(db.raws, date, String(raw).trim(), k) : []; }
+function purLinkCell(attr, i, l){
+  const c=purCands(l.recvDate, l.raw, l.kg); if(!c.length) return '<span class="mut">없음</span>';
+  return `<select ${attr}="link" data-i="${i}"><option value="">새 입고로</option>${c.map(m=>`<option value="${m.id}" ${l.link===m.id?'selected':''}>${m.id} 연결(${customerEscape(m.supplier||'매입처 없음')})</option>`).join('')}</select>`
+    + (l.link?'':` <label style="display:inline"><input type="checkbox" ${attr}="allowSimilar" data-i="${i}" ${l.allowSimilar?'checked':''} style="width:auto"> 별개 입고</label>`);
+}
+function renderPur(){
+  if(!purSaver) purSaver=new Purchase.Saver(purStore());
+  if(!purDraft) purNewDraft();
+  const E=customerEscape, P=db.pur;
+  const opts=P.sups.filter(s=>s.active!==false).map(s=>`<option value="${E(s.code)}">${E(s.code+' '+s.name)}</option>`).join('');
+  $('pu-sup').innerHTML='<option value="">— 매입처 고르기 —</option>'+opts; $('pu-sup').value=purDraft.sup_code;
+  $('pu-fsup').innerHTML='<option value="">전체</option>'+opts;
+  if(!$('pu-sc').value){ const n=Math.max(0,...P.sups.map(s=>/^S(\d+)$/.exec(s.code)?.[1]).filter(Boolean).map(Number)); $('pu-sc').placeholder='예: S'+String(n+1).padStart(3,'0'); }
+  ['date','src_doc_no','doc_total','memo'].forEach(k=>{ const id={date:'pu-date',src_doc_no:'pu-docno',doc_total:'pu-total',memo:'pu-memo'}[k]; $(id).value=purDraft[k]; });
+  $('pu-lines').tBodies[0].innerHTML=purDraft.lines.map((l,i)=>{ const raw=l.category==='원료', a='data-pf';
+    const inp=(f,w,extra='')=>`<input ${a}="${f}" data-i="${i}" value="${E(l[f]??'')}" style="width:${w}px" ${extra}>`;
+    return `<tr><td>${i+1}</td><td><select ${a}="category" data-i="${i}" ${l.category?'':'style="border-color:var(--wine)"'}>${l.category?'':'<option value="" selected>— 구분 확인 —</option>'}${Purchase.CATS.map(c=>`<option ${c===l.category?'selected':''}>${c}</option>`).join('')}</select></td>
+      <td>${inp('item',130)}${l.warn&&l.warn.length?`<br><small style="color:var(--wine)">${E(l.warn.join(' · '))}</small>`:''}</td><td>${inp('spec',70)}</td><td>${inp('unit',55)}</td>
+      <td class="n">${inp('qty',70,'inputmode="decimal"')}</td><td class="n">${inp('price',80,'inputmode="decimal"')}</td><td class="n">${inp('amt',90,'inputmode="numeric"')}</td>
+      <td><select ${a}="tax" data-i="${i}">${Purchase.TAXES.map(c=>`<option ${c===l.tax?'selected':''}>${c}</option>`).join('')}</select></td><td class="n">${inp('vat',80,'inputmode="numeric"')}</td>
+      <td>${raw?`<input ${a}="raw" data-i="${i}" list="rawlist" value="${E(l.raw)}" style="width:100px">`:'<span class="mut">—</span>'}</td>
+      <td class="n">${raw?inp('kg',70,'inputmode="decimal"'):'<span class="mut">—</span>'}</td>
+      <td>${raw?`<input type="checkbox" ${a}="recv" data-i="${i}" ${l.recv?'checked':''} style="width:auto">`:''}</td>
+      <td>${raw&&l.recv?`<input type="date" ${a}="recvDate" data-i="${i}" value="${E(l.recvDate)}">`:'<span class="mut">'+(raw?'미반영':'')+'</span>'}</td>
+      <td>${raw&&l.recv?purLinkCell(a,i,l):''}</td><td><button class="btn warn" data-pdel="${i}" style="padding:2px 8px">줄 삭제</button></td></tr>`; }).join('');
+  $('pu-save').disabled=!purReviewed;
+  // 결과 미확정
+  const pd=purSaver.pending; $('pu-pend-card').hidden=!pd;
+  if(pd){ const d=pd.doc; $('pu-pend-msg').innerHTML=`${E(d.date)} · ${E(purSupName(d.sup_code))} · ${d.lines.length}줄 · 공급가 ${won(d.lines.reduce((a,x)=>a+x.amt,0))}원 (요청 번호 ${E(pd.key)}, ${E(pd.at)})`; }
+  // 미반영 원료 줄
+  const pend=Purchase.pending(P.docs, P.lines);
+  $('pu-pend').tBodies[0].innerHTML=pend.map(({l,d})=>{ const st=purPend[l.id] ||= {recvDate:d.date, raw:l.raw||'', kg:l.kg==null?'':String(l.kg), link:'', allowSimilar:false};
+    return `<tr><td>${d.date}</td><td>${E(d.id)}</td><td>${E(purSupName(d.sup_code))}</td><td>${E(l.item)}</td><td class="n">${kg3(Number(l.qty))} ${E(l.unit)}</td><td class="n">${won(l.amt)}</td>
+      <td><input type="date" data-qf="recvDate" data-i="${l.id}" value="${E(st.recvDate)}"></td><td><input data-qf="raw" data-i="${l.id}" list="rawlist" value="${E(st.raw)}" style="width:100px"></td>
+      <td class="n"><input data-qf="kg" data-i="${l.id}" value="${E(st.kg)}" style="width:70px" inputmode="decimal"></td><td>${purLinkCell('data-qf', l.id, st)}</td>
+      <td><button class="btn pri" data-qrecv="${l.id}">입고 연결</button></td></tr>`; }).join('') || '<tr><td colspan="11" class="mut">미반영 원료 줄이 없습니다.</td></tr>';
+  renderPurLedger();
+  if(P.off) $('pu-rv').innerHTML=`<b style="color:var(--wine)">매입 표를 읽지 못했습니다: ${E(P.err)}</b>`;
+}
+const purPend={};
+function purFilter(){ return {from:$('pu-from').value||null, to:$('pu-to').value||null, sup:$('pu-fsup').value||null, cat:$('pu-fcat').value||null, canceled:$('pu-fcan').checked}; }
+function renderPurLedger(){
+  const E=customerEscape, rows=Purchase.ledger(db.pur.docs, db.pur.lines, db.pur.sups, purFilter()), sm=Purchase.ledgerSum(rows);
+  $('pu-sum').innerHTML=`${sm.lines}줄 · 공급가 합 <b>${won(sm.supply)}원</b> · 부가세 합 ${won(sm.vat)}원`+(sm.vatUnknown?` <b style="color:var(--wine)">(부가세 미확인 ${sm.vatUnknown}줄 — 합계에 0으로 넣지 않고 빠져 있음)</b>`:'');
+  $('pu-ledger').tBodies[0].innerHTML=rows.map(r=>`<tr class="${r.canceled?'cancel':''}"><td>${r.date}</td><td>${E(r.doc_id)}${r.src_doc_no?`<br><small>${E(r.src_doc_no)}</small>`:''}</td><td>${E(r.sup)}</td><td>${r.line_no}</td><td>${r.category}</td>
+    <td>${E(r.item)}${r.spec?' '+E(r.spec):''}</td><td class="n">${kg3(r.qty)}</td><td>${E(r.unit)}</td><td class="n">${r.price===null?'<span class="mut">없음</span>':won(r.price)}</td><td class="n">${won(r.amt)}</td>
+    <td>${r.tax}</td><td class="n">${r.vat===null?'<span class="mut">미확인</span>':won(r.vat)}</td>
+    <td>${r.receipt==='반영'?`반영 ${E(r.raw)} ${kg3(r.kg)}kg <small>${E(r.raw_move_id)}</small>`:r.receipt==='미반영'?'<b style="color:var(--wine)">미반영</b>':'<span class="mut">해당없음</span>'}</td>
+    <td>${r.total_check}</td><td>${r.line_no===1&&!r.canceled?`<button class="btn warn" data-pcan="${E(r.doc_id)}" style="padding:2px 8px">매입 취소</button>`:''}</td></tr>`).join('')
+    || '<tr><td colspan="15" class="mut">조건에 맞는 매입이 없습니다.</td></tr>';
+}
+['pu-from','pu-to','pu-fsup','pu-fcat','pu-fcan'].forEach(id=>$(id).addEventListener('change', renderPurLedger));
+$('pu-csv').onclick=()=>{ const f=purFilter(), rows=Purchase.ledger(db.pur.docs, db.pur.lines, db.pur.sups, f); if(!rows.length) return alert('저장할 줄이 없습니다.');
+  const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob(['﻿'+Purchase.csv(rows)],{type:'text/csv'})); a.download=`매입장_${f.from||'처음'}_${f.to||today()}.csv`; a.click(); };
+// 머리 칸
+[['pu-date','date'],['pu-docno','src_doc_no'],['pu-total','doc_total'],['pu-memo','memo'],['pu-sup','sup_code']].forEach(([id,k])=>$(id).addEventListener('change',()=>{
+  const old=purDraft.date; purDraft[k]=$(id).value; purReviewed=null; $('pu-save').disabled=true;
+  if(k==='date') purDraft.lines.forEach(l=>{ if(!l.recvDate||l.recvDate===old) l.recvDate=purDraft.date; });
+  if(k==='date') renderPur(); }));
+// 줄 칸: 값만 바꾸고, 구조가 바뀌는 칸(구분·지금 입고·입고일·원료·kg·연결)만 다시 그린다(입력 중 칸 유지)
+$('pu-lines').addEventListener('change', e=>{ const t=e.target, f=t.dataset.pf; if(!f) return; const l=purDraft.lines[+t.dataset.i]; if(!l) return;
+  l[f]=t.type==='checkbox'?t.checked:t.value; purReviewed=null; $('pu-save').disabled=true;
+  if(f==='category' && l.category!=='원료'){ l.recv=false; l.raw=''; l.kg=''; }
+  if(f==='recv' && l.recv && !l.recvDate) l.recvDate=purDraft.date;
+  if(['raw','kg','recvDate','recv'].includes(f)){ l.link=''; l.allowSimilar=false; }
+  if(f==='link' && l.link) l.allowSimilar=false;
+  if(f==='qty'||f==='price'){ const q=Purchase.num(l.qty), p=Purchase.num(l.price); if(q>0 && p!==null && !Number.isNaN(p)) l.amt=String(Math.round(q*p)); }
+  if(['category','recv','recvDate','raw','kg','link','qty','price'].includes(f)) renderPur(); });
+$('pu-lines').addEventListener('click', e=>{ const d=e.target.dataset.pdel; if(d===undefined) return; purDraft.lines.splice(+d,1); purReviewed=null; renderPur(); });
+$('pu-add').onclick=()=>{ purDraft.lines.push(Purchase.blankLine(purDraft.date)); purReviewed=null; renderPur(); };
+$('pu-clear').onclick=()=>{ if(purDraft.lines.some(l=>l.item) && !confirm('쓰던 매입 내용을 지우고 새로 쓸까요?')) return; purNewDraft(); $('pu-rv').innerHTML=''; renderPur(); };
+$('pu-read').onclick=()=>{ const t=$('pu-text').value; if(!t.trim()) return alert('명세서 글을 붙여 넣으세요.');
+  const st=parseStmt(t, purDraft.date||null, null), E=customerEscape;
+  const hit=db.pur.sups.find(s=>st.sup && (s.name.replace(/\s/g,'')===st.sup.replace(/\s/g,'')));
+  if(purDraft.lines.length===1 && !purDraft.lines[0].item) purDraft.lines=[];
+  if(st.date && (!purDraft.date || purDraft.date===today())) purDraft.date=st.date;
+  if(hit && !purDraft.sup_code) purDraft.sup_code=hit.code;
+  st.rows.forEach(r=>purDraft.lines.push(Purchase.lineFromStmt(r, purDraft.date)));
+  purReviewed=null; renderPur();
+  $('pu-rmsg').innerHTML=`${st.rows.length}줄 읽음 · 날짜 ${E(st.date)}`+(st.sup?` · 글의 매입처 「${E(st.sup)}」${hit?' → '+E(hit.code):' <b style="color:var(--wine)">(등록된 매입처 아님 — 위에서 고르거나 등록)</b>'}`:'')
+    +(st.total!=null?` · 글의 합계 ${won(st.total)}원 <b>(증빙 합계 칸에는 넣지 않았습니다 — 부가세 포함 금액인지 보고 직접 넣으세요)</b>`:'')
+    +(st.bad.length?` <b style="color:var(--wine)">못 읽은 줄: ${st.bad.map(E).join(' / ')}</b>`:'')+' · 각 줄 구분·과세·kg를 확인하세요.'; };
+$('pu-review').onclick=()=>{ const rv=Purchase.review(purDraft, db.raws), E=customerEscape;
+  purReviewed = rv.errors.length ? null : Purchase.canonical(Purchase.toPayload(purDraft, db.raws));
+  $('pu-rv').innerHTML=`<div class="pill">공급가 ${won(rv.supply)}원 · 부가세 ${rv.vat===null?'미확인':won(rv.vat)+'원'} · 증빙 합계 ${rv.total===null?'없음':won(rv.total)+'원'} · 확인 ${rv.check} · 지금 입고 ${rv.recv}줄 · 미반영 ${rv.pend}줄</div>`
+    + (rv.errors.length?`<p style="color:var(--wine)"><b>저장할 수 없습니다:</b><br>${rv.errors.map(E).join('<br>')}</p>`:'<p><b>저장할 수 있습니다.</b> 내용이 맞으면 「매입 저장」을 누르세요.</p>')
+    + (rv.warns.length?`<p class="mut">${rv.warns.map(E).join('<br>')}</p>`:'');
+  $('pu-save').disabled=!purReviewed; };
+async function purAfterSave(c, label){
+  const E=customerEscape;
+  if(c.kind==='ok'){ await reloadPur(); const d=c.data;
+    $('pu-rv').innerHTML=`<p><b>${d.replay?'이미 저장돼 있던 매입입니다(두 번 저장 안 됨)':'매입 저장 완료'}: ${E(d.doc_id)}</b>${d.replay?'':` · ${d.lines}줄 · 공급가 ${won(d.supply_amt)}원 · 입고 ${d.received}줄 · 미반영 ${d.pending}줄 · 합계 확인 ${E(d.total_check)}`}</p>`;
+    purNewDraft(); $('pu-text').value=''; $('pu-rmsg').textContent=''; renderPur(); renderRaw(); return; }
+  if(c.kind==='rejected'){ alert(label+' 실패(저장 안 됨): '+c.message); renderPur(); return; }
+  renderPur(); alert('응답을 받지 못했습니다. 저장됐는지 모릅니다.\n위 「같은 내용 다시 보내기」를 누르면 두 번 저장되지 않고 결과를 확인합니다.');
+}
+$('pu-save').onclick=async ()=>{ if($('pu-save').disabled || !purReviewed) return;
+  let doc; try{ doc=Purchase.toPayload(purDraft, db.raws); }catch(e){ return alert(e.message); }
+  if(Purchase.canonical(doc)!==purReviewed){ purReviewed=null; $('pu-save').disabled=true; return alert('검토 뒤 내용이 바뀌었습니다. 다시 「검토」하세요.'); }
+  const rv=Purchase.review(purDraft, db.raws);
+  if(!confirm(`${doc.date} ${purSupName(doc.sup_code)} — ${doc.lines.length}줄, 공급가 ${won(rv.supply)}원, 원료 입고 ${rv.recv}줄·미반영 ${rv.pend}줄.\n매입으로 저장할까요?`)) return;
+  let p; try{ p=purSaver.prepare(doc); }catch(e){ renderPur(); return alert(e.message); }
+  $('pu-save').disabled=true;
+  let c; try{ c=await purSaver.send(purRpc, p); }catch(e){ c={kind:'unknown', message:String(e.message||e)}; }
+  await purAfterSave(c, '매입 저장'); };
+$('pu-resend').onclick=async ()=>{ const p=purSaver.pending; if(!p || $('pu-resend').disabled) return; $('pu-resend').disabled=true;
+  let c; try{ c=await purSaver.send(purRpc, p); }catch(e){ c={kind:'unknown'}; } finally{ $('pu-resend').disabled=false; }
+  await purAfterSave(c, '다시 보내기'); };
+$('pu-discard').onclick=()=>{ if(!purSaver.pending) return;
+  if(!confirm('매입장에서 이 매입이 저장됐는지(또는 안 됐는지) 확인했나요?\n버리면 이 요청은 다시 보낼 수 없습니다.')) return; purSaver.discard(); renderPur(); };
+$('pu-sadd').onclick=async ()=>{ const code=$('pu-sc').value.trim(), name=$('pu-sn').value.trim();
+  if(!/^[0-9A-Za-z_-]{1,20}$/.test(code)) return alert('코드는 영문·숫자 20자 이내로 쓰세요(예: '+$('pu-sc').placeholder.replace('예: ','')+').'); if(!name) return alert('이름을 쓰세요.');
+  const ex=db.pur.sups.find(s=>s.code===code); if(ex && !confirm(`이미 있는 코드입니다(${ex.name}). 이름을 「${name}」로 바꿀까요?`)) return;
+  const dupName=db.pur.sups.find(s=>s.code!==code && s.name.replace(/\s/g,'')===name.replace(/\s/g,'')); if(dupName && !confirm(`같은 이름의 매입처가 이미 있습니다(${dupName.code}). 그래도 따로 만들까요?`)) return;
+  $('pu-sadd').disabled=true; const r=await sb.rpc('upsert_supplier',{p_code:code, p_name:name, p_memo:null}); $('pu-sadd').disabled=false;
+  if(r.error) return alert('매입처 저장 실패: '+r.error.message);
+  await reloadPur(); if(!purDraft.sup_code) purDraft.sup_code=code; $('pu-sc').value=''; $('pu-sn').value='';
+  $('pu-smsg').textContent=`${code} ${name} ${r.data?.new?'등록':'이름 수정'}됨`; renderPur(); };
+// 미반영 줄 → 나중 입고
+$('pu-pend').addEventListener('change', e=>{ const t=e.target, f=t.dataset.qf; if(!f) return; const st=purPend[t.dataset.i]; if(!st) return;
+  st[f]=t.type==='checkbox'?t.checked:t.value; if(f!=='link'&&f!=='allowSimilar'){ st.link=''; st.allowSimilar=false; } if(f==='link'&&st.link) st.allowSimilar=false; renderPur(); });
+$('pu-pend').addEventListener('click', async e=>{ const id=e.target.dataset.qrecv; if(!id || e.target.disabled) return; const st=purPend[id], kg=Purchase.num(st.kg);
+  if(!st.recvDate) return alert('입고일을 넣으세요.'); if(!st.raw.trim()) return alert('원료를 고르세요.'); if(!(kg>0)) return alert('입고 kg를 0보다 큰 숫자로 넣으세요.');
+  const c=purCands(st.recvDate, st.raw, kg); if(c.length && !st.link && !st.allowSimilar) return alert(`같은 날 같은 원료·kg 입고(${c.map(m=>m.id).join(', ')})가 이미 있습니다. 연결하거나 「별개 입고」를 체크하세요.`);
+  if(!confirm(`${st.recvDate} ${st.raw} ${kg3(kg)}kg${st.link?` — 기존 입고 ${st.link}에 연결`:' — 새 입고'}. 진행할까요?`)) return;
+  e.target.disabled=true;
+  const r=await sb.rpc('receive_purchase_line',{p_line_id:Number(id), p_date:st.recvDate, p_raw:st.raw.trim(), p_kg:kg, p_link_raw_move_id:st.link||null, p_allow_similar:!!st.allowSimilar});
+  const k=Purchase.classify(r); e.target.disabled=false;
+  if(k.kind==='rejected') return alert('입고 연결 실패: '+k.message);
+  if(k.kind==='unknown') alert('응답을 받지 못했습니다. 새로 읽어 결과를 보여 드립니다(같은 내용으로 다시 눌러도 두 번 입고되지 않습니다).');
+  else delete purPend[id];
+  $('pu-rv').innerHTML=''; await reloadPur(); renderPur(); renderRaw(); });
+// 매입 취소(연결 입고도 함께 취소)
+$('pu-ledger').addEventListener('click', async e=>{ const id=e.target.dataset.pcan; if(!id || e.target.disabled) return;
+  const n=db.pur.lines.filter(l=>l.doc_id===id && l.raw_move_id).length;
+  const why=prompt(`${id} 매입을 취소합니다.${n?`\n연결된 원료 입고 ${n}건도 함께 취소되어 원료수불부 재고가 줄어듭니다.`:''}\n취소 사유를 적으세요:`); if(why===null) return; if(!why.trim()) return alert('취소 사유를 적어야 취소됩니다.');
+  e.target.disabled=true; const r=await sb.rpc('cancel_purchase',{p_doc_id:id, p_reason:why.trim()}); const k=Purchase.classify(r);
+  if(k.kind==='rejected'){ e.target.disabled=false; return alert('취소 실패: '+k.message); }
+  if(k.kind==='unknown') alert('응답을 받지 못했습니다. 새로 읽어 결과를 보여 드립니다(다시 눌러도 두 번 취소되지 않습니다).');
+  $('pu-rv').innerHTML=''; await reloadPur(); renderPur(); renderRaw(); });
 
 /* ── 설정·백업 ── */
 const ME=['name','bizno','ceo','addr','type','item','tel','bank'];
